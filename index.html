@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#161F2A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RTFD Field">
+<title>RTFD Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* Chroma in this app means response zone. Nothing else is colored. */
+:root{
+  --bg:#0E141B; --panel:#161F2A; --panel-2:#1E2937; --line:#2C3A4B;
+  --ink:#E8EEF4; --dim:#93A4B7; --faint:#61748A;
+  --z-fleetwood:#2073D6; --z-lowerie:#E0801A; --z-higherie:#8B62D6;
+  --z-greenpond:#17915C; --z-supply:#D33F30; --z-none:#6B7C8F;
+  --tap:52px; --safe-b:env(safe-area-inset-bottom,0px);
+  --display:'Barlow Condensed',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;
+  line-height:1.45;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid #E8EEF4;outline-offset:2px}
+#app{display:flex;flex-direction:column;height:100dvh}
+.topbar{display:flex;align-items:center;gap:10px;height:46px;padding:0 12px;
+  background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto}
+.topbar h1{margin:0;font-family:var(--display);font-weight:700;font-size:19px;
+  letter-spacing:.06em;text-transform:uppercase}
+.topbar .sub{font-family:var(--display);font-size:14px;letter-spacing:.14em;
+  color:var(--faint);text-transform:uppercase}
+.spacer{flex:1}
+.netdot{width:9px;height:9px;border-radius:50%;background:var(--z-greenpond);flex:0 0 auto}
+.netdot[data-net="off"]{background:var(--z-none)}
+.qbadge{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:99px;
+  background:var(--panel-2);border:1px solid var(--line);color:var(--dim)}
+.qbadge[hidden]{display:none}
+#view{flex:1 1 auto;position:relative;overflow:hidden}
+.tabs{display:flex;flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);
+  padding-bottom:var(--safe-b)}
+.tabs button{flex:1;min-height:var(--tap);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;padding:6px 4px;color:var(--faint);font-family:var(--display);
+  font-size:13px;letter-spacing:.1em;text-transform:uppercase;border-top:2px solid transparent}
+.tabs button[aria-current="page"]{color:var(--ink);border-top-color:var(--ink)}
+.tabs svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+.pane{position:absolute;inset:0;display:flex;flex-direction:column}
+.searchrow{display:flex;gap:8px;padding:8px 12px 6px;background:var(--panel)}
+.searchrow input{flex:1;min-height:44px;padding:0 12px;background:var(--bg);color:var(--ink);
+  border:1px solid var(--line);border-radius:6px;font-family:var(--body);font-size:16px}
+.searchrow input::placeholder{color:var(--faint)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:0 12px 8px;background:var(--panel);
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:0 0 auto;min-height:34px;padding:0 12px;border:1px solid var(--line);
+  border-radius:99px;font-family:var(--display);font-size:14px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:7px}
+.chips button[aria-pressed="true"]{background:var(--panel-2);color:var(--ink);border-color:var(--dim)}
+.chips i{width:9px;height:9px;border-radius:50%;background:var(--z-none)}
+.segmented{display:flex;padding:0 12px 8px;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+.segmented button{flex:1;min-height:38px;font-family:var(--display);font-size:14px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border:1px solid var(--line)}
+.segmented button:first-child{border-radius:6px 0 0 6px}
+.segmented button:last-child{border-radius:0 6px 6px 0}
+.segmented button + button{border-left:0}
+.segmented button[aria-pressed="true"]{background:var(--panel-2);color:var(--ink)}
+.count{padding:6px 14px;font-family:var(--mono);font-size:11px;color:var(--faint);
+  background:var(--bg);border-bottom:1px solid var(--line)}
+
+#map{flex:1 1 auto;background:#0B1016}
+.leaflet-container{background:#0B1016;font-family:var(--body)}
+.leaflet-control-attribution{background:rgba(14,20,27,.8)!important;color:var(--faint)!important}
+.leaflet-control-attribution a{color:var(--dim)!important}
+.pin{border-radius:50%;border:2px solid rgba(255,255,255,.85);box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+
+.list{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+.card{display:grid;grid-template-columns:6px 1fr auto;align-items:center;gap:0 14px;width:100%;
+  text-align:left;padding:0;border-bottom:1px solid var(--line);min-height:78px}
+.card:active{background:var(--panel)}
+.flag{align-self:stretch;background:var(--z-none)}
+.flag[data-zone="Fleetwood"]{background:var(--z-fleetwood)}
+.flag[data-zone="Low Erie"]{background:var(--z-lowerie)}
+.flag[data-zone="High Erie"]{background:var(--z-higherie)}
+.flag[data-zone="Green Pond"]{background:var(--z-greenpond)}
+.flag[data-zone="Supply"]{background:var(--z-supply)}
+.card .body{padding:12px 0;min-width:0}
+.card .unit{font-family:var(--display);font-weight:700;font-size:28px;line-height:1;
+  letter-spacing:.02em;display:flex;align-items:baseline;gap:8px}
+.card .unit.unset{color:var(--faint)}
+.card .street{color:var(--dim);font-size:14px;margin-top:4px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;padding-right:8px}
+.card .meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px}
+.warn{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#0E141B;
+  background:var(--z-lowerie);border-radius:3px;padding:1px 5px;vertical-align:middle}
+.oosb{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#fff;
+  background:var(--z-supply);border-radius:3px;padding:1px 5px}
+.card .range{padding-right:14px;text-align:right}
+.card .dist{font-family:var(--mono);font-size:17px;font-weight:600}
+.card .bearing{display:block;margin:2px 0 0 auto;width:26px;height:26px;stroke:var(--dim);
+  fill:none;stroke-width:2;transition:transform .25s ease}
+@media (prefers-reduced-motion:reduce){.card .bearing{transition:none}}
+.empty{padding:36px 24px;text-align:center;color:var(--dim)}
+.empty strong{display:block;font-family:var(--display);font-size:20px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink);margin-bottom:6px}
+
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:90%;overflow-y:auto;z-index:1000;
+  background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;
+  padding:14px 16px calc(18px + var(--safe-b));transform:translateY(101%);
+  transition:transform .22s ease;box-shadow:0 -12px 30px rgba(0,0,0,.45)}
+.sheet.open{transform:translateY(0)}
+@media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+.sheet-head{display:flex;align-items:flex-start;gap:12px}
+.sheet-head h2{margin:0;font-family:var(--display);font-weight:700;font-size:32px;line-height:1}
+.sheet-head .street{color:var(--dim);margin-top:4px}
+.closeb{min-width:44px;min-height:44px;font-size:22px;color:var(--dim);margin-left:auto}
+.alert{margin-top:12px;padding:10px 12px;border-radius:6px;background:var(--panel-2);
+  border-left:3px solid var(--z-lowerie);font-size:14px;color:var(--dim)}
+.fldlab{font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:16px 0 0}
+.zonerow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+.zonerow button{flex:1 1 30%;min-height:44px;border:1px solid var(--line);border-radius:6px;
+  font-family:var(--display);font-size:14px;letter-spacing:.04em;color:var(--dim)}
+.zonerow button[aria-pressed="true"]{color:#fff;border-color:transparent}
+.zonerow button[data-zone="Fleetwood"][aria-pressed="true"]{background:var(--z-fleetwood)}
+.zonerow button[data-zone="Low Erie"][aria-pressed="true"]{background:var(--z-lowerie)}
+.zonerow button[data-zone="High Erie"][aria-pressed="true"]{background:var(--z-higherie)}
+.zonerow button[data-zone="Green Pond"][aria-pressed="true"]{background:var(--z-greenpond)}
+.zonerow button[data-zone="Supply"][aria-pressed="true"]{background:var(--z-supply)}
+label.fld{display:block;margin-top:14px}
+label.fld span{display:block;font-family:var(--display);font-size:13px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+label.fld input,label.fld textarea,label.fld select{width:100%;min-height:46px;padding:10px 12px;
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+  font-family:var(--body);font-size:16px}
+label.fld textarea{min-height:70px;resize:vertical}
+label.fld input.big{font-family:var(--display);font-size:26px;font-weight:700}
+.two{display:flex;gap:8px}
+.two label.fld{flex:1}
+.oos{display:flex;align-items:center;gap:10px;margin-top:16px;min-height:var(--tap)}
+.oos input{width:22px;height:22px;accent-color:var(--z-supply)}
+.actions{display:flex;gap:8px;margin-top:18px}
+.btn{flex:1;min-height:var(--tap);border-radius:6px;border:1px solid var(--line);
+  font-family:var(--display);font-size:16px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+.btn.primary{background:var(--ink);color:#0E141B;border-color:var(--ink);font-weight:600}
+.btn.ghost{color:var(--dim)}
+.btn:disabled{opacity:.45}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin-top:16px;
+  font-family:var(--mono);font-size:12px;color:var(--faint)}
+.kv b{font-weight:400}
+.kv span{color:var(--dim)}
+
+.settings{padding:16px 16px calc(24px + var(--safe-b));overflow-y:auto}
+.settings h2{font-family:var(--display);font-size:15px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:26px 0 10px;font-weight:600}
+.settings h2:first-child{margin-top:4px}
+.settings p{color:var(--dim);margin:0 0 10px}
+.row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row .lab{flex:1}
+.row .lab b{display:block;font-weight:600}
+.row .lab small{color:var(--faint)}
+.row .val{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.row .sw{width:12px;height:12px;border-radius:50%;border:1px solid rgba(255,255,255,.7)}
+.toast{position:fixed;left:50%;bottom:calc(78px + var(--safe-b));transform:translate(-50%,14px);
+  background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:11px 16px;
+  border-radius:8px;font-size:14px;z-index:2000;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s;max-width:88vw}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <h1>RTFD</h1><span class="sub">Hydrants</span>
+    <span class="spacer"></span>
+    <span class="qbadge" id="queue" hidden></span>
+    <span class="netdot" id="net" data-net="on" role="status" aria-label="Connection"></span>
+  </header>
+  <main id="view"></main>
+  <nav class="tabs" id="tabs" aria-label="Tools"></nav>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* RTFD Field — single file build.
+   Data: Hyd_Test.xlsx, Hydrants sheet, 582 records. */
+(function () {
+'use strict';
+
+var SEED_VERSION = 'hyd-test-2026-08-02';
+var SEED = [{"id":"H-0001","unit":"H-0001","street":"Commons Way @ Entrance to Rock Point","zone":"Green Pond","own":"P","size":"12\"","lat":40.926088,"lon":-74.496778,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0002","unit":"H-0002","street":"100 Commons Way @ Record Exit North","zone":"Green Pond","own":"M","size":"12\"","lat":40.926385,"lon":-74.49559,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0003","unit":"H-0003","street":"400 Commons Way Between Driveways","zone":"Green Pond","own":"M","size":"12\"","lat":40.927223,"lon":-74.493949,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0004","unit":"H-0004","street":"400 Commons Way South Entrance","zone":"Green Pond","own":"M","size":"12\"","lat":40.927201,"lon":-74.492497,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0005","unit":"H-0005","street":"Commons Way By Roundhill","zone":"Green Pond","own":"M","size":"12\"","lat":40.926716,"lon":-74.490576,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0006","unit":"H-0006","street":"Commons Way Between 200 commons and #5","zone":"Green Pond","own":"M","size":"12\"","lat":40.926006,"lon":-74.490295,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0007","unit":"H-0007","street":"Commons Way Across from 200","zone":"Green Pond","own":"M","size":"12\"","lat":40.925158,"lon":-74.49084,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0008","unit":"H-0008","street":"Commons Way @ Record Main Entrance","zone":"Green Pond","own":"M","size":"12\"","lat":40.92421,"lon":-74.491451,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0009","unit":"H-0009","street":"Commons Way South of 100","zone":"Green Pond","own":"M","size":"12\"","lat":40.92297,"lon":-74.491966,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0010","unit":"H-0010","street":"Commons Way Closest to Greenpond","zone":"Green Pond","own":"M","size":"12\"","lat":40.922005,"lon":-74.492927,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0011","unit":"H-0011","street":"300 Roundhill Drive","zone":"Green Pond","own":"M","size":"10\"","lat":40.928261,"lon":-74.490834,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0012","unit":"H-0012","street":"200 Roundhill Drive","zone":"Green Pond","own":"M","size":"10\"","lat":40.929406,"lon":-74.48959,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0013","unit":"H-0013","street":"Roundhill Drive @ GPR","zone":"Green Pond","own":"M","size":"10\"","lat":40.931226,"lon":-74.488691,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0014","unit":"H-0014","street":"198 Green Pond Road","zone":"Green Pond","own":"M","size":"10\"","lat":40.931343,"lon":-74.488308,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0016","unit":"H-0016","street":"140 Green Pond Road Entrance","zone":"Green Pond","own":"M","size":"10\"","lat":40.927846,"lon":-74.486672,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0017","unit":"H-0017","street":"1 Cody Court","zone":"Green Pond","own":"M","size":"6\"","lat":40.927294,"lon":-74.487337,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0018","unit":"H-0018","street":"20 Cody Court","zone":"Green Pond","own":"M","size":"6\"","lat":40.927577,"lon":-74.488531,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0019","unit":"H-0019","street":"147 Green Pond Road (Across)","zone":"Green Pond","own":"M","size":"12\"","lat":40.926609,"lon":-74.486363,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0020","unit":"H-0020","street":"135 Green Pond Road (Across)","zone":"Green Pond","own":"M","size":"12\"","lat":40.925144,"lon":-74.486975,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0021","unit":"H-0021","street":"129 Green Pond Road (Across)","zone":"Green Pond","own":"M","size":"12\"","lat":40.924279,"lon":-74.488024,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0022","unit":"H-0022","street":"117 Green Pond Road (Across)","zone":"Green Pond","own":"M","size":"12\"","lat":40.923349,"lon":-74.489193,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0023","unit":"H-0023","street":"109 Green Pond Road (Across)","zone":"Green Pond","own":"M","size":"12\"","lat":40.922284,"lon":-74.490679,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0024","unit":"H-0024","street":"102 Green Pond Road","zone":"Green Pond","own":"M","size":"12\"","lat":40.920761,"lon":-74.492369,"notes":"OOS","status":"oos","flags":"","geo":"1","updated":""},{"id":"H-0025","unit":"H-0025","street":"94 Green Pond Road","zone":"Green Pond","own":"M","size":"12\"","lat":40.920331,"lon":-74.492986,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0027","unit":"H-0027","street":"74 Green Pond Road","zone":"Green Pond","own":"M","size":"12\"","lat":40.91818,"lon":-74.495405,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0029","unit":"H-0029","street":"52 Green Pond Road","zone":"Green Pond","own":"P","size":"12\"","lat":40.916273,"lon":-74.497846,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0031","unit":"H-0031","street":"100 Commons Way C/D Corner","zone":"Green Pond","own":"P","size":"Unknown","lat":40.925316,"lon":-74.494257,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0032","unit":"H-0032","street":"100 Commons Way C side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.9247,"lon":-74.495019,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0033","unit":"H-0033","street":"100 Commons Way B Side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.923403,"lon":-74.494847,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0034","unit":"H-0034","street":"100 Commons Way-Front Door","zone":"Green Pond","own":"P","size":"Unknown","lat":40.923817,"lon":-74.493592,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0035","unit":"H-0035","street":"100 Commons Way Loadingdock Parking","zone":"Green Pond","own":"P","size":"Unknown","lat":40.925146,"lon":-74.493012,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0036","unit":"H-0036","street":"400 Commons Way C/D Corner","zone":"Green Pond","own":"P","size":"Unknown","lat":40.928389,"lon":-74.492884,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0037","unit":"H-0037","street":"400 Commons Way- Front of Building","zone":"Green Pond","own":"P","size":"Unknown","lat":40.927675,"lon":-74.493983,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0038","unit":"H-0038","street":"200 Commons Way- B side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.924945,"lon":-74.490239,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0039","unit":"H-0039","street":"200 Commons Way- D Side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.924494,"lon":-74.490834,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0040","unit":"H-0040","street":"301 Roundhill Drive- Front","zone":"Green Pond","own":"P","size":"Unknown","lat":40.928263,"lon":-74.489783,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0041","unit":"H-0041","street":"301 Roundhill Drive- Rear Behind Gate","zone":"Green Pond","own":"P","size":"Unknown","lat":40.928145,"lon":-74.489686,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0042","unit":"H-0042","street":"1 Conventry Blvd (41 GPR Build)","zone":"Green Pond","own":"P","size":"8\"","lat":40.916565,"lon":-74.499257,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0043","unit":"H-0043","street":"39 Green Pond Appartments Build E","zone":"Green Pond","own":"P","size":"8\"","lat":40.916871,"lon":-74.502196,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0044","unit":"H-0044","street":"39 Green Pond Appartments Build C","zone":"Green Pond","own":"P","size":"8\"","lat":40.916608,"lon":-74.501488,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0045","unit":"H-0045","street":"39 Green Pond Appartments Build A","zone":"Green Pond","own":"P","size":"8\"","lat":40.916293,"lon":-74.500673,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0046","unit":"H-0046","street":"100 Forge Way","zone":"Green Pond","own":"P","size":"Unknown","lat":40.92059,"lon":-74.494788,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0047","unit":"H-0047","street":"400 Forge Way A/D Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.921287,"lon":-74.495577,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0048","unit":"H-0048","street":"400 Forge Way C/D Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.921587,"lon":-74.495244,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0049","unit":"H-0049","street":"400 Forge Way B/C Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.922601,"lon":-74.496928,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0050","unit":"H-0050","street":"400 Forge Way A/B Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.922341,"lon":-74.497336,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0051","unit":"H-0051","street":"200 Forge Way A/D Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.921587,"lon":-74.498152,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0052","unit":"H-0052","street":"200 Forge Way Rear lot","zone":"Green Pond","own":"P","size":"10\"","lat":40.921069,"lon":-74.498699,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0053","unit":"H-0053","street":"200 Forge Way A/B Corner","zone":"Green Pond","own":"P","size":"10\"","lat":40.920436,"lon":-74.496328,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0056","unit":"H-0056","street":"60 Green Pond Road","zone":"Green Pond","own":"P","size":"12\"","lat":40.915167,"lon":-74.49445,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0057","unit":"H-0057","street":"53 Green Pond Road A/D Corner","zone":"Green Pond","own":"P","size":"Unknown","lat":40.917181,"lon":-74.49732,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0058","unit":"H-0058","street":"53 Green Pond Road C/ D Corner","zone":"Green Pond","own":"P","size":"Unknown","lat":40.917793,"lon":-74.496467,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0059","unit":"H-0059","street":"53 Green Pond Road B Side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.918041,"lon":-74.49784,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0060","unit":"H-0060","street":"53 Green Pond Road A Side","zone":"Green Pond","own":"P","size":"Unknown","lat":40.917449,"lon":-74.498007,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0063","unit":"H-0063","street":"1701 Devon Ln","zone":"Green Pond","own":"P","size":"8\"","lat":40.917546,"lon":-74.49997,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0064","unit":"H-0064","street":"1810 Devon Ln","zone":"Green Pond","own":"P","size":"8\"","lat":40.918081,"lon":-74.49953,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0065","unit":"H-0065","street":"601 Parkview Lane @ corner","zone":"Green Pond","own":"P","size":"8\"","lat":40.918442,"lon":-74.501628,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0066","unit":"H-0066","street":"104 Parkview Lane","zone":"Green Pond","own":"P","size":"8\"","lat":40.917356,"lon":-74.502443,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0067","unit":"H-0067","street":"1051 Parkview Lane","zone":"Green Pond","own":"P","size":"8\"","lat":40.919601,"lon":-74.500834,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0068","unit":"H-0068","street":"1612 Parkview Lane","zone":"Green Pond","own":"P","size":"8\"","lat":40.920979,"lon":-74.499493,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0069","unit":"H-0069","street":"40 Greenpond Rd 1st lot Cemner","zone":"Green Pond","own":"P","size":"12\"","lat":40.91397,"lon":-74.499696,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0070","unit":"H-0070","street":"1 Sanders Rd (31 GPR Build)","zone":"Low Erie","own":"P","size":"8\"","lat":40.915029,"lon":-74.500877,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0071","unit":"H-0071","street":"3 Sanders Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.915384,"lon":-74.501291,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0072","unit":"H-0072","street":"6 Braemer Dr","zone":"Low Erie","own":"P","size":"8\"","lat":40.915008,"lon":-74.501892,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0073","unit":"H-0073","street":"27 Braemar Dr","zone":"Low Erie","own":"P","size":"8\"","lat":40.915289,"lon":-74.50276,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0074","unit":"H-0074","street":"13 Sanders Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.91603,"lon":-74.502714,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0075","unit":"H-0075","street":"17 Sanders Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.916415,"lon":-74.503293,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0076","unit":"H-0076","street":"32 Sanders Rd","zone":"Supply","own":"M","size":"10\"","lat":40.917613,"lon":-74.504629,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0077","unit":"H-0077","street":"50 Sanders Rd Booster Station","zone":"Supply","own":"M","size":"16\"","lat":40.918736,"lon":-74.506024,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0078","unit":"H-0078","street":"1 Sherbrook Dr","zone":"Low Erie","own":"M","size":"12\"","lat":40.918825,"lon":-74.505286,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0079","unit":"H-0079","street":"11 Sherbrook Dr","zone":"Low Erie","own":"M","size":"12\"","lat":40.919954,"lon":-74.504862,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0080","unit":"H-0080","street":"15 Sherbrook Dr","zone":"Low Erie","own":"M","size":"12\"","lat":40.920471,"lon":-74.504377,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0081","unit":"H-0081","street":"29 Sherbrook Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.92199,"lon":-74.502949,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0082","unit":"H-0082","street":"39 Sherbrook Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.923224,"lon":-74.502105,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0083","unit":"H-0083","street":"51 Sherbrook Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.92438,"lon":-74.501166,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0084","unit":"H-0084","street":"5 Raleigh Ct","zone":"Low Erie","own":"M","size":"8\"","lat":40.924936,"lon":-74.499013,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0085","unit":"H-0085","street":"11 Fernwood Rd","zone":"Low Erie","own":"M","size":"12\"","lat":40.921217,"lon":-74.502254,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0086","unit":"H-0086","street":"21 Fernwood Rd","zone":"Low Erie","own":"M","size":"12\"","lat":40.922293,"lon":-74.501503,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0087","unit":"H-0087","street":"35 Fernwood Rd","zone":"Low Erie","own":"M","size":"12\"","lat":40.923568,"lon":-74.50045,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0088","unit":"H-0088","street":"45 Fernwood Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.925095,"lon":-74.49988,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0089","unit":"H-0089","street":"57 Fernwood Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.925329,"lon":-74.500914,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0090","unit":"H-0090","street":"7 Timber Ct","zone":"Low Erie","own":"M","size":"6\"","lat":40.921446,"lon":-74.504755,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0091","unit":"H-0091","street":"12 Fieldstone Ln (Across)","zone":"Low Erie","own":"M","size":"6\"","lat":40.921206,"lon":-74.505745,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0092","unit":"H-0092","street":"11 Omaha Ave (Across)","zone":"Low Erie","own":"M","size":"6\"","lat":40.912146,"lon":-74.505915,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0093","unit":"H-0093","street":"27 Omaha Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.913483,"lon":-74.505253,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0094","unit":"H-0094","street":"34 Omaha Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.914988,"lon":-74.504892,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0095","unit":"H-0095","street":"57 Omaha Ave (Across)(","zone":"Low Erie","own":"M","size":"8\"","lat":40.915594,"lon":-74.505289,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0096","unit":"H-0096","street":"71 Omaha Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.916916,"lon":-74.505981,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0097","unit":"H-0097","street":"85 Omaha Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.917757,"lon":-74.506558,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0098","unit":"H-0098","street":"56 Omaha Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.918278,"lon":-74.507083,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0099","unit":"H-0099","street":"86 Omaha Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.920935,"lon":-74.507931,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0100","unit":"H-0100","street":"1 Shawnee Ave","zone":"Supply","own":"M","size":"16\"","lat":40.921871,"lon":-74.509055,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0101","unit":"H-0101","street":"2 Shawnee Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.922005,"lon":-74.509141,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0102","unit":"H-0102","street":"28 Shawnee Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.924046,"lon":-74.508159,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0103","unit":"H-0103","street":"67 Shawnee Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.927015,"lon":-74.505699,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0104","unit":"H-0104","street":"19 Ellen Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.914929,"lon":-74.508202,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0105","unit":"H-0105","street":"7 Ellen Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.913651,"lon":-74.50762,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0107","unit":"H-0107","street":"16 Ronald Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.915094,"lon":-74.507231,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0108","unit":"H-0108","street":"12 Wichita Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.916377,"lon":-74.507067,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0109","unit":"H-0109","street":"36 Pawnee Ave","zone":"Low Erie","own":"M","size":"10\"","lat":40.919619,"lon":-74.510128,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0110","unit":"H-0110","street":"14 Norman Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.919632,"lon":-74.509143,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0111","unit":"H-0111","street":"2 Jamie Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.919885,"lon":-74.511018,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0112","unit":"H-0112","street":"14 Jamie Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.92025,"lon":-74.511863,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0113","unit":"H-0113","street":"2 Rebecca Ln","zone":"Low Erie","own":"M","size":"6\"","lat":40.91952,"lon":-74.511198,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0114","unit":"H-0114","street":"101 Oakland Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.91892,"lon":-74.508668,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0115","unit":"H-0115","street":"79 Oakland Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.917311,"lon":-74.508365,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0116","unit":"H-0116","street":"57 Oakland Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.91546,"lon":-74.509521,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0117","unit":"H-0117","street":"33 Oakland Ave/ @Kaw","zone":"Low Erie","own":"M","size":"6\"","lat":40.913207,"lon":-74.509073,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0118","unit":"H-0118","street":"11 Oakland Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.912162,"lon":-74.507231,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0119","unit":"H-0119","street":"22 Mountain Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.914068,"lon":-74.511198,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0120","unit":"H-0120","street":"42 Mountain Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.916318,"lon":-74.510636,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0122","unit":"H-0122","street":"1 White Meadow Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.911875,"lon":-74.5105,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0123","unit":"H-0123","street":"24 White Meadow Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.914644,"lon":-74.512416,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0124","unit":"H-0124","street":"34 White Meadow Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.916026,"lon":-74.512472,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0125","unit":"H-0125","street":"69 White Meadow Rd (Across)","zone":"Low Erie","own":"M","size":"8\"","lat":40.917765,"lon":-74.512598,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0126","unit":"H-0126","street":"72 White Meadow Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.919701,"lon":-74.512471,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0127","unit":"H-0127","street":"80 White Meadow Rd","zone":"Low Erie","own":"M","size":"8\"","lat":40.920736,"lon":-74.512753,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0128","unit":"H-0128","street":"98 White Meadow Rd (Beach one Lot)","zone":"Low Erie","own":"M","size":"8\"","lat":40.922698,"lon":-74.511445,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0130","unit":"H-0130","street":"163 White Meadow Rd","zone":"High Erie","own":"M","size":"6\"","lat":40.926322,"lon":-74.510972,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0131","unit":"H-0131","street":"179 White Meadow Rd","zone":"High Erie","own":"M","size":"6\"","lat":40.927465,"lon":-74.510179,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0132","unit":"H-0132","street":"193 White Meadow Rd","zone":"High Erie","own":"M","size":"6\"","lat":40.928583,"lon":-74.509964,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0133","unit":"H-0133","street":"4 Upper Mountain Ave","zone":"Low Erie","own":"M","size":"10\"","lat":40.920927,"lon":-74.511431,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0134","unit":"H-0134","street":"223 White Meadow Rd","zone":"High Erie","own":"M","size":"8\"","lat":40.932016,"lon":-74.510307,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0135","unit":"H-0135","street":"8 Upper Mountain Ave (Across)","zone":"Low Erie","own":"M","size":"8\"","lat":40.921016,"lon":-74.510777,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0136","unit":"H-0136","street":"43 Upper Mountain Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.922655,"lon":-74.509908,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0137","unit":"H-0137","street":"65 Upper Mountain Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.924317,"lon":-74.509041,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0138","unit":"H-0138","street":"85 Upper Mountain Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.92587,"lon":-74.508207,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0139","unit":"H-0139","street":"76 Upper Mountain Ave / Dead End","zone":"Low Erie","own":"M","size":"6\"","lat":40.927491,"lon":-74.507419,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0140","unit":"H-0140","street":"16 Clubhouse Way","zone":"Low Erie","own":"M","size":"8\"","lat":40.924317,"lon":-74.509331,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0141","unit":"H-0141","street":"4 Clubhouse Way/ Temple","zone":"Low Erie","own":"M","size":"8\"","lat":40.924992,"lon":-74.510694,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0143","unit":"H-0143","street":"13 Huron Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.91245,"lon":-74.515007,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0144","unit":"H-0144","street":"2 Sioux Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.912799,"lon":-74.516417,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0145","unit":"H-0145","street":"5 Sioux Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.912998,"lon":-74.515312,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0146","unit":"H-0146","street":"17 Sioux Ave/ @ Roanoke","zone":"Low Erie","own":"M","size":"6\"","lat":40.913241,"lon":-74.514207,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0147","unit":"H-0147","street":"43 Sioux Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.915807,"lon":-74.514095,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0148","unit":"H-0148","street":"13 Roanoke Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.913967,"lon":-74.514937,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0149","unit":"H-0149","street":"1 Roanoke Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.91359,"lon":-74.513499,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0150","unit":"H-0150","street":"25 Nokomis Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.916488,"lon":-74.515935,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0151","unit":"H-0151","street":"35 Dakotah Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.914149,"lon":-74.516616,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0152","unit":"H-0152","street":"19 Dakotah Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.912037,"lon":-74.516299,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0153","unit":"H-0153","street":"16 Hilltop Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.912511,"lon":-74.517614,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0154","unit":"H-0154","street":"5 Berry Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.912179,"lon":-74.521272,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0155","unit":"H-0155","street":"13 Berry Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.913415,"lon":-74.521449,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0156","unit":"H-0156","street":"24 Berry Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.913959,"lon":-74.523042,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0157","unit":"H-0157","street":"34 Berry Dr","zone":"Low Erie","own":"M","size":"8\"","lat":40.912965,"lon":-74.523348,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0158","unit":"H-0158","street":"12 Henry St","zone":"Low Erie","own":"M","size":"8\"","lat":40.91286,"lon":-74.522361,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0159","unit":"H-0159","street":"28 Seneca Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.915475,"lon":-74.517758,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0160","unit":"H-0160","street":"55 Seneca Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.915484,"lon":-74.521107,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0161","unit":"H-0161","street":"44 Seneca Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.915641,"lon":-74.5197,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0162","unit":"H-0162","street":"21 Oneida Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.917534,"lon":-74.520167,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0163","unit":"H-0163","street":"13 Iroqiois Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.915702,"lon":-74.511187,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0164","unit":"H-0164","street":"1 Monhegon","zone":"Low Erie","own":"M","size":"6\"","lat":40.91751,"lon":-74.515618,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0165","unit":"H-0165","street":"29 Seminole Ave","zone":"Low Erie","own":"M","size":"10\"","lat":40.91031,"lon":-74.513488,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0166","unit":"H-0166","street":"51 Seminole Ave","zone":"Low Erie","own":"M","size":"10\"","lat":40.909077,"lon":-74.515843,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0167","unit":"H-0167","street":"13 South Dakotah Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.910399,"lon":-74.51579,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0169","unit":"H-0169","street":"24 Hibernia Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.921271,"lon":-74.515318,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0170","unit":"H-0170","street":"37 Hibernia Ave/@ Mohawk","zone":"Low Erie","own":"M","size":"8\"","lat":40.920049,"lon":-74.517477,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0171","unit":"H-0171","street":"63 Hibernia Ave","zone":"Low Erie","own":"M","size":"10\"","lat":40.91851,"lon":-74.519098,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0172","unit":"H-0172","street":"13 Calumet Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.918434,"lon":-74.515833,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0173","unit":"H-0173","street":"16 Mohawk Ave","zone":"Low Erie","own":"M","size":"8\"","lat":40.918559,"lon":-74.513981,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0174","unit":"H-0174","street":"1 Wenonah Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.921717,"lon":-74.517292,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0175","unit":"H-0175","street":"25 Wenonah Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.920144,"lon":-74.519164,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0176","unit":"H-0176","street":"15 Lake Shore Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.922617,"lon":-74.514781,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0177","unit":"H-0177","street":"37 Lake Shore Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.923079,"lon":-74.516734,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0178","unit":"H-0178","street":"63 Lake Shore Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.922208,"lon":-74.518534,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0179","unit":"H-0179","street":"89 Lake Shore Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.920532,"lon":-74.5205,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0180","unit":"H-0180","street":"111 Lake Shore Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.918843,"lon":-74.520398,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0181","unit":"H-0181","street":"129 Lake Shore Dr","zone":"Low Erie","own":"M","size":"10\"","lat":40.918588,"lon":-74.521111,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0182","unit":"H-0182","street":"147 Lake Shore Dr","zone":"Low Erie","own":"M","size":"10\"","lat":40.918726,"lon":-74.523214,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0183","unit":"H-0183","street":"11 Ute Pl","zone":"Low Erie","own":"M","size":"8\"","lat":40.917615,"lon":-74.525628,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0184","unit":"H-0184","street":"6 Ute Pl","zone":"Low Erie","own":"M","size":"8\"","lat":40.917924,"lon":-74.525365,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0185","unit":"H-0185","street":"27 Ute Pl","zone":"Low Erie","own":"M","size":"8\"","lat":40.916046,"lon":-74.525599,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0186","unit":"H-0186","street":"48 Reservoir Rd","zone":"Low Erie","own":"M","size":"6\"","lat":40.914946,"lon":-74.525435,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0187","unit":"H-0187","street":"13 Lake View Ct","zone":"Low Erie","own":"M","size":"6\"","lat":40.920102,"lon":-74.524743,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0188","unit":"H-0188","street":"3 West Lakeshore Dr","zone":"Low Erie","own":"M","size":"10\"","lat":40.918636,"lon":-74.524941,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0189","unit":"H-0189","street":"10 West Lakeshore Dr (Across)","zone":"Low Erie","own":"M","size":"10\"","lat":40.919771,"lon":-74.5258,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0190","unit":"H-0190","street":"25 West Lakeshore Dr","zone":"Low Erie","own":"M","size":"10\"","lat":40.920363,"lon":-74.526798,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0191","unit":"H-0191","street":"29 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.920704,"lon":-74.526967,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0192","unit":"H-0192","street":"51 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.92325,"lon":-74.5259,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0193","unit":"H-0193","street":"43 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.92197,"lon":-74.526857,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0194","unit":"H-0194","street":"73 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.921393,"lon":-74.519242,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0195","unit":"H-0195","street":"97 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.91995,"lon":-74.520658,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0196","unit":"H-0196","street":"105 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919352,"lon":-74.520577,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0197","unit":"H-0197","street":"117 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.927487,"lon":-74.522294,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0198","unit":"H-0198","street":"131 West Lakeshore Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.927793,"lon":-74.520449,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0199","unit":"H-0199","street":"154 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.929183,"lon":-74.517836,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0200","unit":"H-0200","street":"170 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.930137,"lon":-74.516981,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0201","unit":"H-0201","street":"186 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.931368,"lon":-74.515902,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0202","unit":"H-0202","street":"201 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.932754,"lon":-74.51491,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0203","unit":"H-0203","street":"218 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.933238,"lon":-74.513118,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0204","unit":"H-0204","street":"234 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.933151,"lon":-74.511294,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0205","unit":"H-0205","street":"1 North Lakeshore Dr","zone":"High Erie","own":"M","size":"6\"","lat":40.927548,"lon":-74.511182,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0206","unit":"H-0206","street":"13 North Lake Shore Dr","zone":"High Erie","own":"M","size":"6\"","lat":40.928743,"lon":-74.511871,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0207","unit":"H-0207","street":"31 North Lakeshore Dr","zone":"High Erie","own":"M","size":"6\"","lat":40.930267,"lon":-74.51152,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0208","unit":"H-0208","street":"20 South Brookside Dr","zone":"Fleetwood","own":"M","size":"12\"","lat":40.92357,"lon":-74.530022,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0209","unit":"H-0209","street":"36 South Brookside Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.924319,"lon":-74.531899,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0210","unit":"H-0210","street":"7 Cayuga Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.924565,"lon":-74.530019,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0211","unit":"H-0211","street":"23 Cayuga Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.926253,"lon":-74.528949,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0212","unit":"H-0212","street":"59 Cayuga Ave","zone":"High Erie","own":"M","size":"8\"","lat":40.928925,"lon":-74.526732,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0213","unit":"H-0213","street":"41 Cayuga Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.92772,"lon":-74.527986,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0214","unit":"H-0214","street":"1 Apache Trail","zone":"High Erie","own":"M","size":"8\"","lat":40.930383,"lon":-74.525514,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0215","unit":"H-0215","street":"93 Cayuga Train","zone":"High Erie","own":"M","size":"6\"","lat":40.931342,"lon":-74.524064,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0216","unit":"H-0216","street":"107 Cayuga Trail","zone":"High Erie","own":"M","size":"6\"","lat":40.931161,"lon":-74.525328,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0217","unit":"H-0217","street":"23 Apache Traill","zone":"High Erie","own":"M","size":"8\"","lat":40.930435,"lon":-74.522903,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0218","unit":"H-0218","street":"17 North Brookside Drive","zone":"Fleetwood","own":"M","size":"6\"","lat":40.924935,"lon":-74.528088,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0219","unit":"H-0219","street":"12 Miami Train","zone":"High Erie","own":"M","size":"6\"","lat":40.928344,"lon":-74.523686,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0220","unit":"H-0220","street":"26 Miami Trail","zone":"High Erie","own":"M","size":"8\"","lat":40.929299,"lon":-74.522662,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0221","unit":"H-0221","street":"38 Miami Trail","zone":"High Erie","own":"M","size":"8\"","lat":40.930602,"lon":-74.521693,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0222","unit":"H-0222","street":"48 Miami Trail","zone":"High Erie","own":"M","size":"8\"","lat":40.931513,"lon":-74.521004,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0223","unit":"H-0223","street":"66 Miami Trail","zone":"High Erie","own":"M","size":"8\"","lat":40.932071,"lon":-74.519143,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0224","unit":"H-0224","street":"219 Jackson Ave","zone":"High Erie","own":"M","size":"8\"","lat":40.933438,"lon":-74.517066,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0225","unit":"H-0225","street":"10 South Brookside","zone":"Fleetwood","own":"M","size":"8\"","lat":40.92297,"lon":-74.528503,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0226","unit":"H-0226","street":"2 Lenape Ave","zone":"Fleetwood","own":"M","size":"10\"","lat":40.920935,"lon":-74.528139,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0227","unit":"H-0227","street":"21 Old Middletown Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.921198,"lon":-74.530364,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0228","unit":"H-0228","street":"4 Ridge Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919638,"lon":-74.533672,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0229","unit":"H-0229","street":"12 Ridge Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919559,"lon":-74.535351,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0231","unit":"H-0231","street":"28 Snyder Dr","zone":"Fleetwood","own":"M","size":"10\"","lat":40.918701,"lon":-74.534447,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0232","unit":"H-0232","street":"59 Old Middletown Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.918673,"lon":-74.533069,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0233","unit":"H-0233","street":"7 Hopler Ct","zone":"Fleetwood","own":"M","size":"6\"","lat":40.91896,"lon":-74.531839,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0234","unit":"H-0234","street":"23 Woodside Dr","zone":"Fleetwood","own":"M","size":"6\"","lat":40.919185,"lon":-74.530567,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0235","unit":"H-0235","street":"11 Woodside Dr","zone":"Fleetwood","own":"M","size":"6\"","lat":40.917484,"lon":-74.531178,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0236","unit":"H-0236","street":"29 Circle Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.918716,"lon":-74.529611,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0237","unit":"H-0237","street":"15 Circle Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.917453,"lon":-74.530023,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0238","unit":"H-0238","street":"23 Midway Ct","zone":"Fleetwood","own":"M","size":"6\"","lat":40.918065,"lon":-74.528825,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0239","unit":"H-0239","street":"12 Circle Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.916492,"lon":-74.529123,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0240","unit":"H-0240","street":"73 Circle Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.917885,"lon":-74.527728,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0241","unit":"H-0241","street":"53 Circle Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919864,"lon":-74.528176,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0242","unit":"H-0242","street":"29 Woodside Dr","zone":"Fleetwood","own":"M","size":"6\"","lat":40.920027,"lon":-74.530268,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0243","unit":"H-0243","street":"13 Everment Rd","zone":"Fleetwood","own":"M","size":"6\"","lat":40.925478,"lon":-74.540399,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0244","unit":"H-0244","street":"600 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.927473,"lon":-74.542547,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0245","unit":"H-0245","street":"580 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.92513,"lon":-74.542086,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0246","unit":"H-0246","street":"527 Mt Hope Rd","zone":"","own":"M","size":"10\"","lat":40.922341,"lon":-74.540206,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0247","unit":"H-0247","street":"459 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.919036,"lon":-74.537198,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0248","unit":"H-0248","street":"423 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.916993,"lon":-74.534613,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0250","unit":"H-0250","street":"90 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.914502,"lon":-74.529032,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0251","unit":"H-0251","street":"98 Hunting Meadow Ct","zone":"Fleetwood","own":"M","size":"8\"","lat":40.912945,"lon":-74.526967,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0252","unit":"H-0252","street":"Mt Hope Rd / Recycle Center","zone":"Fleetwood","own":"M","size":"10\"","lat":40.912084,"lon":-74.528058,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0253","unit":"H-0253","street":"14 Queens Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.910129,"lon":-74.52832,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0254","unit":"H-0254","street":"34 Queens Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.910244,"lon":-74.531761,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0255","unit":"H-0255","street":"44 Queens Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.910024,"lon":-74.533743,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0256","unit":"H-0256","street":"64 Queens Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.909962,"lon":-74.536998,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0257","unit":"H-0257","street":"22 Edith Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.90543,"lon":-74.53754,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0258","unit":"H-0258","street":"2 PatricaLn","zone":"Fleetwood","own":"M","size":"8\"","lat":40.907227,"lon":-74.535906,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0259","unit":"H-0259","street":"102 Jordan Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.905721,"lon":-74.536156,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0260","unit":"H-0260","street":"89 Jordan Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904115,"lon":-74.535126,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0261","unit":"H-0261","street":"Demolino Dr & Jordan","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904906,"lon":-74.535678,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0262","unit":"H-0262","street":"7 Demolino Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904873,"lon":-74.535032,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0263","unit":"H-0263","street":"9 Demolino Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904529,"lon":-74.53441,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0264","unit":"H-0264","street":"Miller Ave & Jordan","zone":"Fleetwood","own":"M","size":"8\"","lat":40.907273,"lon":-74.531706,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0265","unit":"H-0265","street":"21 Miller Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.905822,"lon":-74.530853,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0266","unit":"H-0266","street":"5 Miller Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.909126,"lon":-74.530789,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0267","unit":"H-0267","street":"1 Arlene Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.906771,"lon":-74.532999,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0268","unit":"H-0268","street":"15 Arlene Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.905303,"lon":-74.532104,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0269","unit":"H-0269","street":"12 Arlene Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904277,"lon":-74.53154,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0270","unit":"H-0270","street":"Cambridge Dr & Arlene","zone":"Fleetwood","own":"M","size":"8\"","lat":40.903357,"lon":-74.529861,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0271","unit":"H-0271","street":"Cambridge Dr & Lenox","zone":"Fleetwood","own":"M","size":"8\"","lat":40.902392,"lon":-74.52992,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0272","unit":"H-0272","street":"37 Lenox Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.902627,"lon":-74.531465,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0273","unit":"H-0273","street":"25 Lenox Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.903924,"lon":-74.532924,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0274","unit":"H-0274","street":"17 Lenox Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.905007,"lon":-74.533514,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0275","unit":"H-0275","street":"Lenox Rd & Jordan","zone":"Fleetwood","own":"M","size":"8\"","lat":40.906381,"lon":-74.534104,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0276","unit":"H-0276","street":"2 Stanley Terr","zone":"Fleetwood","own":"M","size":"6\"","lat":40.907727,"lon":-74.542971,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0277","unit":"H-0277","street":"406 Mineral Springs Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.907813,"lon":-74.545348,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0278","unit":"H-0278","street":"498 Mineral Springs Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.908611,"lon":-74.546152,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0279","unit":"H-0279","street":"64 Fleetwood Dr","zone":"Fleetwood","own":"M","size":"10\"","lat":40.908315,"lon":-74.538163,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0280","unit":"H-0280","street":"48 Fleetwood Dr","zone":"Fleetwood","own":"M","size":"10\"","lat":40.908184,"lon":-74.534836,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0281","unit":"H-0281","street":"32 Fleetwood Dr","zone":"Fleetwood","own":"M","size":"10\"","lat":40.9082,"lon":-74.53202,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0282","unit":"H-0282","street":"20 Fleetwood Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.908514,"lon":-74.52875,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0283","unit":"H-0283","street":"4 Fleetwood Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.909504,"lon":-74.525978,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0284","unit":"H-0284","street":"54 Kings Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.901419,"lon":-74.528793,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0285","unit":"H-0285","street":"36 Kings Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904275,"lon":-74.527924,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0286","unit":"H-0286","street":"26 Kings Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.90541,"lon":-74.527559,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0287","unit":"H-0287","street":"14 Kings Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.907117,"lon":-74.527085,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0288","unit":"H-0288","street":"56 Robin St","zone":"Fleetwood","own":"M","size":"12\"","lat":40.902692,"lon":-74.52823,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0289","unit":"H-0289","street":"50 Robin St","zone":"Fleetwood","own":"M","size":"12\"","lat":40.904316,"lon":-74.526561,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0290","unit":"H-0290","street":"47 Robin St","zone":"Fleetwood","own":"M","size":"12\"","lat":40.903093,"lon":-74.52654,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0291","unit":"H-0291","street":"16 Crown Pl","zone":"Fleetwood","own":"M","size":"8\"","lat":40.90371,"lon":-74.523541,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0292","unit":"H-0292","street":"9 Skyview Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.903637,"lon":-74.525038,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0293","unit":"H-0293","street":"3 Skyview Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904192,"lon":-74.524523,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0294","unit":"H-0294","street":"16 Skyview Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904541,"lon":-74.523777,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0295","unit":"H-0295","street":"30 Robin St","zone":"Fleetwood","own":"M","size":"12\"","lat":40.905481,"lon":-74.526009,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0296","unit":"H-0296","street":"20 Robin St","zone":"Fleetwood","own":"M","size":"12\"","lat":40.906973,"lon":-74.525607,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0297","unit":"H-0297","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.900652,"lon":-74.534404,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0298","unit":"H-0298","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.900636,"lon":-74.534791,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0299","unit":"H-0299","street":"192 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.901295,"lon":-74.532336,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0300","unit":"H-0300","street":"51 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.902416,"lon":-74.541102,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0301","unit":"H-0301","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.900588,"lon":-74.535166,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0302","unit":"H-0302","street":"10 Pine Hill Ct","zone":"Fleetwood","own":"M","size":"6\"","lat":40.900247,"lon":-74.531679,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0303","unit":"H-0303","street":"330 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.90133,"lon":-74.529582,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0304","unit":"H-0304","street":"334 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.901248,"lon":-74.530365,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0305","unit":"H-0305","street":"165 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.901905,"lon":-74.534115,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0306","unit":"H-0306","street":"103 Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.900652,"lon":-74.533525,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0307","unit":"H-0307","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.899647,"lon":-74.533203,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0308","unit":"H-0308","street":"8 Lea Pl","zone":"Fleetwood","own":"M","size":"8\"","lat":40.906868,"lon":-74.523842,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0309","unit":"H-0309","street":"20 Legion Ct","zone":"Fleetwood","own":"M","size":"8\"","lat":40.904975,"lon":-74.521347,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0310","unit":"H-0310","street":"11 Legion Ct","zone":"Fleetwood","own":"M","size":"8\"","lat":40.906381,"lon":-74.521176,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0311","unit":"H-0311","street":"134 McKinley Pl","zone":"Fleetwood","own":"M","size":"8\"","lat":40.908419,"lon":-74.523769,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0312","unit":"H-0312","street":"198 McKinley Pl","zone":"Fleetwood","own":"M","size":"8\"","lat":40.908129,"lon":-74.521771,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0313","unit":"H-0313","street":"665 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"10\"","lat":40.921936,"lon":-74.542027,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0314","unit":"H-0314","street":"613 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"10\"","lat":40.919605,"lon":-74.543999,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0315","unit":"H-0315","street":"519 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.916358,"lon":-74.545055,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0316","unit":"H-0316","street":"507 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.915456,"lon":-74.5456,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0317","unit":"H-0317","street":"502 Mt Hope Rd","zone":"","own":"M","size":"","lat":40.914096,"lon":-74.546764,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0318","unit":"H-0318","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0319","unit":"H-0319","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0320","unit":"H-0320","street":"Mt Hope Ave (Access #1)","zone":"Fleetwood","own":"M","size":"12\"","lat":40.907707,"lon":-74.547837,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0321","unit":"H-0321","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0322","unit":"H-0322","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0323","unit":"H-0323","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0324","unit":"H-0324","street":"Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.909076,"lon":-74.547132,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0325","unit":"H-0325","street":"271 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.898414,"lon":-74.547172,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0326","unit":"H-0326","street":"254 Mt Hope Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.897081,"lon":-74.548623,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0327","unit":"H-0327","street":"Gaydos St","zone":"Fleetwood","own":"M","size":"Unknown","lat":40.90015,"lon":-74.542236,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0328","unit":"H-0328","street":"Gaydos St","zone":"Fleetwood","own":"M","size":"Unknown","lat":40.900182,"lon":-74.541034,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0329","unit":"H-0329","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.900085,"lon":-74.533814,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0330","unit":"H-0330","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.901204,"lon":-74.534426,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0331","unit":"H-0331","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.900182,"lon":-74.534662,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0332","unit":"H-0332","street":"356 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.914058,"lon":-74.575995,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0333","unit":"H-0333","street":"310 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.913821,"lon":-74.572313,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0336","unit":"H-0336","street":"286 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.913403,"lon":-74.568897,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0337","unit":"H-0337","street":"261 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.913488,"lon":-74.567294,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0338","unit":"H-0338","street":"240 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.91376,"lon":-74.565258,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0339","unit":"H-0339","street":"237 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.914021,"lon":-74.563133,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0340","unit":"H-0340","street":"233 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.91424,"lon":-74.561497,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0341","unit":"H-0341","street":"205 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.91435,"lon":-74.559577,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0342","unit":"H-0342","street":"141 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.91431,"lon":-74.557218,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0343","unit":"H-0343","street":"120 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.915167,"lon":-74.554617,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0345","unit":"H-0345","street":"52 Richard Mine Rd (Across)","zone":"Fleetwood","own":"M","size":"12\"","lat":40.917874,"lon":-74.546882,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0346","unit":"H-0346","street":"99 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.915929,"lon":-74.550721,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0347","unit":"H-0347","street":"41 Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.918643,"lon":-74.5451,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0349","unit":"H-0349","street":"3 St Bernards Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.91788,"lon":-74.548722,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0350","unit":"H-0350","street":"Bobinyec Lane (End of Road)","zone":"Fleetwood","own":"M","size":"6\"","lat":40.917874,"lon":-74.550476,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0351","unit":"H-0351","street":"Bobinyec Lane/ St Bernards Rd","zone":"Fleetwood","own":"M","size":"6\"","lat":40.918366,"lon":-74.54983,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0352","unit":"H-0352","street":"22 St Bernards Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919336,"lon":-74.549779,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0353","unit":"H-0353","street":"3 Florence Dr","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919723,"lon":-74.551181,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0354","unit":"H-0354","street":"40 Lavin Rd","zone":"","own":"P","size":"","lat":40.921948,"lon":-74.549296,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0355","unit":"H-0355","street":"99 Teabo Rd","zone":"","own":"P","size":"","lat":40.920902,"lon":-74.550422,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0357","unit":"H-0357","street":"47 Teabo Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.919743,"lon":-74.554971,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0358","unit":"H-0358","street":"32 Teabo Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.918681,"lon":-74.555047,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0359","unit":"H-0359","street":"22 Teabo Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.918002,"lon":-74.556009,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0360","unit":"H-0360","street":"2 Teabo Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.918002,"lon":-74.557321,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0361","unit":"H-0361","street":"18 Coburn Rd","zone":"Fleetwood","own":"M","size":"6\"","lat":40.916867,"lon":-74.557396,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0362","unit":"H-0362","street":"8 Coburn Rd","zone":"Fleetwood","own":"M","size":"6\"","lat":40.915592,"lon":-74.556807,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0363","unit":"H-0363","street":"Rock Hollow Rd","zone":"Fleetwood","own":"M","size":"6\"","lat":40.917577,"lon":-74.553253,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0364","unit":"H-0364","street":"Irwin Place / Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"8\"","lat":40.90199,"lon":-74.532312,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0365","unit":"H-0365","street":"1 Algonquin Ave","zone":"Fleetwood","own":"M","size":"6\"","lat":40.924143,"lon":-74.526425,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0366","unit":"H-0366","street":"14 Algonquin Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.925363,"lon":-74.526049,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0367","unit":"H-0367","street":"32 Algonquin Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.926883,"lon":-74.525574,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0368","unit":"H-0368","street":"50 Algonquin Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.928535,"lon":-74.525167,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0369","unit":"H-0369","street":"8 Lenape Ave","zone":"Fleetwood","own":"M","size":"6\"","lat":40.922098,"lon":-74.528064,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0370","unit":"H-0370","street":"63 Algonquin Ave (Across)","zone":"High Erie","own":"M","size":"6\"","lat":40.930081,"lon":-74.524798,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0371","unit":"H-0371","street":"Montauk Ave A-Field Lot","zone":"Fleetwood","own":"M","size":"12\"","lat":40.921766,"lon":-74.530156,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0372","unit":"H-0372","street":"The Bolders Maintenance Office","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.901392,"lon":-74.544096,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0373","unit":"H-0373","street":"The Bolders by Mt Hope Ave Exit","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.901374,"lon":-74.545275,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0374","unit":"H-0374","street":"The Bolders Building F","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.901232,"lon":-74.544543,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0375","unit":"H-0375","street":"The Bolders Building I","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.900789,"lon":-74.544051,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0376","unit":"H-0376","street":"The Bolders Building L","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.900783,"lon":-74.543311,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0377","unit":"H-0377","street":"The Bolders Building B","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.901898,"lon":-74.543937,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0378","unit":"H-0378","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.896906,"lon":-74.552965,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0380","unit":"H-0380","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.897003,"lon":-74.55245,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0381","unit":"H-0381","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.896906,"lon":-74.553051,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0382","unit":"H-0382","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.8971,"lon":-74.552407,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0383","unit":"H-0383","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.896873,"lon":-74.552364,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0385","unit":"H-0385","street":"Rustic Ridge Apts","zone":"Fleetwood","own":"P","size":"6\"","lat":40.896873,"lon":-74.55245,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0386","unit":"H-0386","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.90208,"lon":-74.557128,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0387","unit":"H-0387","street":"Brotherton Ave","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902176,"lon":-74.548936,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0388","unit":"H-0388","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902096,"lon":-74.55672,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0389","unit":"H-0389","street":"Hickory Hill Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902273,"lon":-74.550429,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0390","unit":"H-0390","street":"Fox Hound Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901768,"lon":-74.5516,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0391","unit":"H-0391","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902177,"lon":-74.557385,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0392","unit":"H-0392","street":"Patriot","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902064,"lon":-74.552271,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0393","unit":"H-0393","street":"Faech Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913042,"lon":-74.53301,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0394","unit":"H-0394","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902112,"lon":-74.557343,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0395","unit":"H-0395","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902145,"lon":-74.557493,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0396","unit":"H-0396","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901609,"lon":-74.556849,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0397","unit":"H-0397","street":"Independence Way","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902647,"lon":-74.554015,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0398","unit":"H-0398","street":"Powerhorn Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901982,"lon":-74.557106,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0400","unit":"H-0400","street":"Pond View Terr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.900952,"lon":-74.555191,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0401","unit":"H-0401","street":"Homestead Way","zone":"Fleetwood","own":"P","size":"8\"","lat":40.90125,"lon":-74.553582,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0402","unit":"H-0402","street":"Flintrock Terr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.90114,"lon":-74.552761,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0403","unit":"H-0403","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.902404,"lon":-74.557192,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0404","unit":"H-0404","street":"Fallen Timber Terr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.90141,"lon":-74.551031,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0405","unit":"H-0405","street":"Frog Town Rd","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901105,"lon":-74.549552,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0406","unit":"H-0406","street":"Townsquare Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901771,"lon":-74.557085,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0407","unit":"H-0407","street":"Schindler Dr","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901019,"lon":-74.54812,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0408","unit":"H-0408","street":"Heritage Way","zone":"Fleetwood","own":"P","size":"8\"","lat":40.901982,"lon":-74.546957,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0409","unit":"H-0409","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.90778,"lon":-74.552794,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0410","unit":"H-0410","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909394,"lon":-74.554338,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0411","unit":"H-0411","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.908104,"lon":-74.553459,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0412","unit":"H-0412","street":"323 Mt Hope Ave","zone":"Fleetwood","own":"P","size":"","lat":40.908739,"lon":-74.547915,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0413","unit":"H-0413","street":"321 Mt Hope Ave","zone":"Fleetwood","own":"P","size":"","lat":40.9096,"lon":-74.549261,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0414","unit":"H-0414","street":"321 Mt Hope Ave","zone":"Fleetwood","own":"P","size":"","lat":40.9096,"lon":-74.549261,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0415","unit":"H-0415","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909313,"lon":-74.559628,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0416","unit":"H-0416","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909645,"lon":-74.559306,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0417","unit":"H-0417","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909823,"lon":-74.55936,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0418","unit":"H-0418","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909369,"lon":-74.55936,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0419","unit":"H-0419","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909515,"lon":-74.559692,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0420","unit":"H-0420","street":"AMC Movie Theater","zone":"Fleetwood","own":"P","size":"","lat":40.909775,"lon":-74.559692,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0421","unit":"H-0421","street":"Five Guys (rear)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.908842,"lon":-74.554253,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0422","unit":"H-0422","street":"Panera (behind)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.907869,"lon":-74.555025,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0423","unit":"H-0423","street":"Crumble (behind)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.907277,"lon":-74.560443,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0424","unit":"H-0424","street":"Dicks (behind)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.905988,"lon":-74.561173,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0425","unit":"H-0425","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909126,"lon":-74.552901,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0426","unit":"H-0426","street":"Target (Behind)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.905112,"lon":-74.561087,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0427","unit":"H-0427","street":"Target (side)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.904091,"lon":-74.561419,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0428","unit":"H-0428","street":"Target (side)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.904975,"lon":-74.560572,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0429","unit":"H-0429","street":"Target","zone":"Fleetwood","own":"P","size":"","lat":40.905623,"lon":-74.560261,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0430","unit":"H-0430","street":"Target","zone":"Fleetwood","own":"P","size":"","lat":40.904545,"lon":-74.561484,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0431","unit":"H-0431","street":"Dicks","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906053,"lon":-74.558673,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0433","unit":"H-0433","street":"Panera","zone":"Fleetwood","own":"P","size":"8\"","lat":40.907221,"lon":-74.555283,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0434","unit":"H-0434","street":"Starbucks","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906685,"lon":-74.554768,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0434~2","unit":"H-0434","street":"Five Guys","zone":"Fleetwood","own":"P","size":"8\"","lat":40.90735,"lon":-74.555368,"notes":"","status":"ok","flags":"dup#,outside","geo":"1","updated":""},{"id":"H-0435","unit":"H-0435","street":"Mall (Outer Roadway)","zone":"Fleetwood","own":"P","size":"","lat":40.908794,"lon":-74.552729,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0436","unit":"H-0436","street":"Access Road 6","zone":"Fleetwood","own":"P","size":"12\"","lat":40.904326,"lon":-74.559563,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0437","unit":"H-0437","street":"Mall Access 5","zone":"Fleetwood","own":"P","size":"12\"","lat":40.903807,"lon":-74.555476,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0438","unit":"H-0438","street":"Pearle Vision","zone":"Fleetwood","own":"P","size":"8\"","lat":40.907415,"lon":-74.555626,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0439","unit":"H-0439","street":"343 Mt Hope Rd (behind)","zone":"Fleetwood","own":"P","size":"","lat":40.903436,"lon":-74.549065,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0440","unit":"H-0440","street":"Mall (Atlantic Health)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906312,"lon":-74.552965,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0440~2","unit":"H-0440","street":"343 Mt Hope Rd (behind)","zone":"Fleetwood","own":"P","size":"","lat":40.903436,"lon":-74.549065,"notes":"","status":"ok","flags":"dup#,dupXY","geo":"1","updated":""},{"id":"H-0441","unit":"H-0441","street":"343 Mt Hope Rd (behind)","zone":"Fleetwood","own":"P","size":"","lat":40.903436,"lon":-74.549065,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0442","unit":"H-0442","street":"PNC Bank","zone":"Fleetwood","own":"P","size":"8\"","lat":40.904415,"lon":-74.548051,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0443","unit":"H-0443","street":"Mall (Atlantic Health)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.905518,"lon":-74.548706,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0445","unit":"H-0445","street":"Mall (Atlantic Health)","zone":"Fleetwood","own":"P","size":"8\"","lat":40.905429,"lon":-74.548373,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0447","unit":"H-0447","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.90714,"lon":-74.552804,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0449","unit":"H-0449","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.907748,"lon":-74.553308,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0450","unit":"H-0450","street":"Mall Outer Roadway","zone":"Fleetwood","own":"P","size":"","lat":40.90881,"lon":-74.55319,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0451","unit":"H-0451","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909069,"lon":-74.553587,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0452","unit":"H-0452","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.908194,"lon":-74.553105,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0453","unit":"H-0453","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.904042,"lon":-74.555047,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0454","unit":"H-0454","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909142,"lon":-74.553212,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0455","unit":"H-0455","street":"Mall (Nordstroms)","zone":"Fleetwood","own":"P","size":"","lat":40.906896,"lon":-74.552708,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0455~2","unit":"H-0455","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.905339,"lon":-74.553308,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0456","unit":"H-0456","street":"Mall (Outer Roadway)","zone":"Fleetwood","own":"P","size":"","lat":40.908177,"lon":-74.552579,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0457","unit":"H-0457","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.908494,"lon":-74.552697,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0458","unit":"H-0458","street":"Mall (Macy's)","zone":"Fleetwood","own":"P","size":"","lat":40.906312,"lon":-74.553394,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0458~2","unit":"H-0458","street":"Mall (Outer Roadway - Hilton)","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.906377,"lon":-74.553137,"notes":"","status":"ok","flags":"dup#","geo":"1","updated":""},{"id":"H-0459","unit":"H-0459","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.908477,"lon":-74.553148,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0460","unit":"H-0460","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909377,"lon":-74.553137,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0461","unit":"H-0461","street":"Mall (Outer Roadway)","zone":"Fleetwood","own":"P","size":"","lat":40.906361,"lon":-74.551055,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0462","unit":"H-0462","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.908721,"lon":-74.553555,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0463","unit":"H-0463","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.906848,"lon":-74.550948,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0464","unit":"H-0464","street":"Matthew Drive & Anna Cir","zone":"Green Pond","own":"P","size":"8\"","lat":40.926897,"lon":-74.497476,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0465","unit":"H-0465","street":"Rock Point Dr & Matthew Dr","zone":"Green Pond","own":"P","size":"8\"","lat":40.927197,"lon":-74.498688,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0466","unit":"H-0466","street":"Rock Pointe Pl & Lilly Dr","zone":"Green Pond","own":"P","size":"8\"","lat":40.926686,"lon":-74.498211,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0467","unit":"H-0467","street":"Rock Point Dr & Molly Dr","zone":"Green Pond","own":"P","size":"8\"","lat":40.926072,"lon":-74.497521,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0468","unit":"H-0468","street":"Thomas Rd & Anthony Way","zone":"Green Pond","own":"P","size":"8\"","lat":40.925726,"lon":-74.49846,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0469","unit":"H-0469","street":"Anthony Way @ Rock Pointe Place","zone":"Green Pond","own":"P","size":"8\"","lat":40.926539,"lon":-74.499633,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0470","unit":"H-0470","street":"6000 Rock Pointe Place & Water Tower Entrance","zone":"Green Pond","own":"P","size":"8\"","lat":40.924836,"lon":-74.498123,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0471","unit":"H-0471","street":"Mountain View Manor Build R","zone":"Fleetwood","own":"P","size":"8\"","lat":40.914425,"lon":-74.572449,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0472","unit":"H-0472","street":"Mountain View Manor Build N","zone":"Fleetwood","own":"P","size":"8\"","lat":40.91497,"lon":-74.571393,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0473","unit":"H-0473","street":"Mountain View Manor Build L","zone":"Fleetwood","own":"P","size":"8\"","lat":40.915475,"lon":-74.571805,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0474","unit":"H-0474","street":"Mountain View Manor Buid J","zone":"Fleetwood","own":"P","size":"8\"","lat":40.916002,"lon":-74.572293,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0475","unit":"H-0475","street":"Mountain View Manor Build G End of Road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.916695,"lon":-74.572524,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0476","unit":"H-0476","street":"Mountain View Manor Build E &G","zone":"Fleetwood","own":"P","size":"8\"","lat":40.916419,"lon":-74.573318,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0477","unit":"H-0477","street":"Mountain View Manor Build W","zone":"Fleetwood","own":"P","size":"8\"","lat":40.915683,"lon":-74.573205,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0478","unit":"H-0478","street":"Mountain View Manor Build C","zone":"Fleetwood","own":"P","size":"8\"","lat":40.915004,"lon":-74.573194,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0479","unit":"H-0479","street":"30 Green Pond Rd","zone":"Supply","own":"M","size":"10\"","lat":40.913979,"lon":-74.500587,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0480","unit":"H-0480","street":"52 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.915769,"lon":-74.497009,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0481","unit":"H-0481","street":"140 Green Pond Rd","zone":"Green Pond","own":"M","size":"12\"","lat":40.928073,"lon":-74.482584,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0483","unit":"H-0483","street":"50 Shawnee Ave","zone":"Low Erie","own":"M","size":"6\"","lat":40.925513,"lon":-74.506619,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0484","unit":"H-0484","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"10\"","lat":40.92877,"lon":-74.485266,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0485","unit":"H-0485","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"12\"","lat":40.927983,"lon":-74.485695,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0486","unit":"H-0486","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"10\"","lat":40.927325,"lon":-74.484938,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0487","unit":"H-0487","street":"10 Erie Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.929694,"lon":-74.508003,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0488","unit":"H-0488","street":"Mall","zone":"Fleetwood","own":"P","size":"","lat":40.909361,"lon":-74.553577,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0489","unit":"H-0489","street":"41 Erie Ave (Low Erie Tank)","zone":"Low Erie","own":"M","size":"10\"","lat":40.930583,"lon":-74.505638,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0490","unit":"H-0490","street":"41 Erie Ave","zone":"High Erie","own":"M","size":"8\"","lat":40.930839,"lon":-74.50589,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0491","unit":"H-0491","street":"38 Erie Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.931195,"lon":-74.506346,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0492","unit":"H-0492","street":"54 Erie Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.932188,"lon":-74.505482,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0493","unit":"H-0493","street":"81 Erie Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.933811,"lon":-74.504243,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0494","unit":"H-0494","street":"99 Erie Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.935228,"lon":-74.504152,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0495","unit":"H-0495","street":"84 Comanche Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.936729,"lon":-74.505351,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0496","unit":"H-0496","street":"1 Iowa Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.929566,"lon":-74.508698,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0497","unit":"H-0497","street":"63 Comanche Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.935706,"lon":-74.505672,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0498","unit":"H-0498","street":"51 Comanche Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.934833,"lon":-74.505321,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0500","unit":"H-0500","street":"41 Comanche Ave (Beach St)","zone":"High Erie","own":"M","size":"6\"","lat":40.933653,"lon":-74.506512,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0501","unit":"H-0501","street":"19 Comanche Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.932912,"lon":-74.508247,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0502","unit":"H-0502","street":"19 Iowa Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.927799,"lon":-74.508862,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0503","unit":"H-0503","street":"35 Cherokee Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.93106,"lon":-74.50784,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0504","unit":"H-0504","street":"59 Cherokee Ave","zone":"High Erie","own":"M","size":"6\"","lat":40.9323,"lon":-74.506555,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0505","unit":"H-0505","street":"Valley Forge Dr / Mt Hope Rd","zone":"Fleetwood","own":"P","size":"12\"","lat":40.918945,"lon":-74.538696,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0506","unit":"H-0506","street":"17 William St","zone":"Low Erie","own":"M","size":"6\"","lat":40.914307,"lon":-74.506238,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0507","unit":"H-0507","street":"100 Mineral Springs Rd- Rear","zone":"","own":"","size":"","lat":40.90691,"lon":-74.543796,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0508","unit":"H-0508","street":"101 Mineral Springs Rd- Front","zone":"","own":"","size":"","lat":40.906913,"lon":-74.544956,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0509","unit":"H-0509","street":"100 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.90548,"lon":-74.562593,"notes":"","status":"ok","flags":"dupXY","geo":"","updated":""},{"id":"H-0510","unit":"H-0510","street":"100 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.90548,"lon":-74.562593,"notes":"","status":"ok","flags":"dupXY","geo":"","updated":""},{"id":"H-0512","unit":"H-0512","street":"Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.905153,"lon":-74.565936,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0513","unit":"H-0513","street":"100 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.90548,"lon":-74.562593,"notes":"","status":"ok","flags":"dupXY","geo":"","updated":""},{"id":"H-0514","unit":"H-0514","street":"555 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.905566,"lon":-74.565057,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0515","unit":"H-0515","street":"214 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.907087,"lon":-74.562603,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0516","unit":"H-0516","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.906621,"lon":-74.566022,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0517","unit":"H-0517","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.905404,"lon":-74.566355,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0518","unit":"H-0518","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.905372,"lon":-74.564692,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0519","unit":"H-0519","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.905931,"lon":-74.565217,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0520","unit":"H-0520","street":"65 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.912325,"lon":-74.531062,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0521","unit":"H-0521","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.907091,"lon":-74.566011,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0522","unit":"H-0522","street":"Walmart","zone":"Fleetwood","own":"P","size":"10\"","lat":40.906223,"lon":-74.566172,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0523","unit":"H-0523","street":"555 Enterprise Dr","zone":"Fleetwood","own":"P","size":"10\"","lat":40.906183,"lon":-74.565496,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0524","unit":"H-0524","street":"3 Franklin Lane End of Road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912887,"lon":-74.545608,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0525","unit":"H-0525","street":"2 Franklin Lane","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913891,"lon":-74.545145,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0526","unit":"H-0526","street":"Cleaveland Ln / Constitution","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913654,"lon":-74.543395,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0527","unit":"H-0527","street":"2 Cleaveland Ln Middle","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912791,"lon":-74.544012,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0528","unit":"H-0528","street":"3 Cleaveland Ln End of Road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912113,"lon":-74.544194,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0529","unit":"H-0529","street":"Constitution Blvd / Clinton ln","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912665,"lon":-74.54185,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0530","unit":"H-0530","street":"Clinton Ln End of road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.91164,"lon":-74.541335,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0531","unit":"H-0531","street":"181 Valley View Dr","zone":"High Erie","own":"M","size":"6\"","lat":40.932954,"lon":-74.502288,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0532","unit":"H-0532","street":"159 Valley View Dr","zone":"High Erie","own":"M","size":"6\"","lat":40.932093,"lon":-74.500254,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0533","unit":"H-0533","street":"Fischer Ct End of Road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912204,"lon":-74.534511,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0534","unit":"H-0534","street":"Fischer Ct / Constitution","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912204,"lon":-74.534511,"notes":"","status":"ok","flags":"dupXY","geo":"1","updated":""},{"id":"H-0535","unit":"H-0535","street":"131 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.929629,"lon":-74.499922,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0536","unit":"H-0536","street":"115 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.928364,"lon":-74.499611,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0537","unit":"H-0537","street":"1 Constitution Blvd/ Club House","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913979,"lon":-74.543567,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0538","unit":"H-0538","street":"1 Hamilton Drive","zone":"Fleetwood","own":"P","size":"8\"","lat":40.914881,"lon":-74.544613,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0540","unit":"H-0540","street":"Valley Forge Dr Main Gate","zone":"Fleetwood","own":"P","size":"12\"","lat":40.91798,"lon":-74.540209,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0541","unit":"H-0541","street":"Bodner Ln back of lot","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.917722,"lon":-74.541601,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0542","unit":"H-0542","street":"Bodner Ln","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.917518,"lon":-74.540734,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0543","unit":"H-0543","street":"Valley Forge Dr / Clubhouse","zone":"Fleetwood","own":"P","size":"12\"","lat":40.917007,"lon":-74.541142,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0544","unit":"H-0544","street":"Valley Forge Dr / Veterans","zone":"Fleetwood","own":"P","size":"12\"","lat":40.916151,"lon":-74.541457,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0545","unit":"H-0545","street":"Salkind Ln Venterans Dr End","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.916004,"lon":-74.542786,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0546","unit":"H-0546","street":"Valley Forge Dr Veterans /Hoover","zone":"Fleetwood","own":"P","size":"12\"","lat":40.91573,"lon":-74.541346,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0547","unit":"H-0547","street":"Valley Forge Dr / Hoover","zone":"Fleetwood","own":"P","size":"12\"","lat":40.915148,"lon":-74.540091,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0548","unit":"H-0548","street":"Pierce Ln End of Road","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.913407,"lon":-74.539576,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0549","unit":"H-0549","street":"Hale Dr / Valley Forge Dr","zone":"Fleetwood","own":"P","size":"12\"","lat":40.914143,"lon":-74.53905,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0550","unit":"H-0550","street":"Hale Dr End of Road","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.914895,"lon":-74.53869,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0551","unit":"H-0551","street":"Polk Dr End of Road","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.916553,"lon":-74.538728,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0552","unit":"H-0552","street":"Polk Dr Between Build 7&8","zone":"Fleetwood","own":"P","size":"Unknown","lat":40.91633,"lon":-74.539833,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0553","unit":"H-0553","street":"99 Valley View Drive","zone":"Low Erie","own":"M","size":"6\"","lat":40.927157,"lon":-74.500651,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0554","unit":"H-0554","street":"66 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.924982,"lon":-74.502988,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0555","unit":"H-0555","street":"52 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.924308,"lon":-74.504512,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0556","unit":"H-0556","street":"38 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.923614,"lon":-74.5059,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0557","unit":"H-0557","street":"21 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.922593,"lon":-74.506863,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0558","unit":"H-0558","street":"Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.921863,"lon":-74.506434,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0559","unit":"H-0559","street":"1 Valley View Dr","zone":"Low Erie","own":"M","size":"6\"","lat":40.920969,"lon":-74.507032,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0560","unit":"H-0560","street":"400 Commons Way- A/D Corner","zone":"Green Pond","own":"P","size":"Unknown","lat":40.927858,"lon":-74.492868,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0561","unit":"H-0561","street":"140 Green Pond Road","zone":"Green Pond","own":"M","size":"10\"","lat":40.927465,"lon":-74.481645,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0562","unit":"H-0562","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.927558,"lon":-74.483893,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0563","unit":"H-0563","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.928539,"lon":-74.484193,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0564","unit":"H-0564","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.929013,"lon":-74.483356,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0565","unit":"H-0565","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.92973,"lon":-74.483775,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0566","unit":"H-0566","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.929629,"lon":-74.48444,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0567","unit":"H-0567","street":"140 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.929523,"lon":-74.484966,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0568","unit":"H-0568","street":"92 Green Pond Road","zone":"Green Pond","own":"M","size":"12\"","lat":40.919155,"lon":-74.494324,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0569","unit":"H-0569","street":"52 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.915507,"lon":-74.496499,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0570","unit":"H-0570","street":"53 Green Pond Road","zone":"Green Pond","own":"P","size":"Unknown","lat":40.918961,"lon":-74.498881,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0571","unit":"H-0571","street":"30 Green Pond Rd","zone":"Fleetwood","own":"M","size":"2\"","lat":40.913389,"lon":-74.49901,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0571A","unit":"H-0571A","street":"418 Mineral Springs Dr- DBO B Side","zone":"","own":"","size":"","lat":40.91016,"lon":-74.545927,"notes":"Yellow Hydrant; original H-0571 in row 537","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0572","unit":"H-0572","street":"418 Mineral Springs Dr- DBO Front Lot","zone":"Fleetwood","own":"","size":"","lat":40.9096,"lon":-74.546345,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0573","unit":"H-0573","street":"140 West Lakeshore Dr","zone":"High Erie","own":"M","size":"8\"","lat":40.928214,"lon":-74.518974,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0574","unit":"H-0574","street":"18 Navajo Way","zone":"Low Erie","own":"M","size":"6\"","lat":40.913115,"lon":-74.513102,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0575","unit":"H-0575","street":"312 Mt Hope Ave","zone":"Fleetwood","own":"P","size":"12\"","lat":40.90918,"lon":-74.547321,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0576","unit":"H-0576","street":"130 Hawthorne Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.907525,"lon":-74.539946,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0577","unit":"H-0577","street":"75 Laurel Wood Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906085,"lon":-74.539061,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0578","unit":"H-0578","street":"Woodedge Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906197,"lon":-74.540426,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0579","unit":"H-0579","street":"26 Hillsborough Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.906483,"lon":-74.541475,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0580","unit":"H-0580","street":"9 Heatherwood Ct","zone":"Fleetwood","own":"P","size":"8\"","lat":40.9067,"lon":-74.542381,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0581","unit":"H-0581","street":"Mountain View Manor Behiend Build J","zone":"Fleetwood","own":"P","size":"8\"","lat":40.916381,"lon":-74.572057,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0582","unit":"H-0582","street":"100 Mineral Springs Rd (Across)","zone":"Fleetwood","own":"M","size":"8\"","lat":40.906722,"lon":-74.545578,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0586","unit":"H-0586","street":"11 Delaware Ave","zone":"Fleetwood","own":"M","size":"6\"","lat":40.925774,"lon":-74.527484,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0587","unit":"H-0587","street":"Carter Dr @ Build","zone":"Fleetwood","own":"P","size":"8\"","lat":40.915292,"lon":-74.536153,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0588","unit":"H-0588","street":"Carter Dr Middle of the Road","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913817,"lon":-74.538165,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0589","unit":"H-0589","street":"Constitution Blvd / Bush","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912764,"lon":-74.537913,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0590","unit":"H-0590","street":"Constitution Blvd Btween Bush and Fischer","zone":"Fleetwood","own":"P","size":"8\"","lat":40.912741,"lon":-74.535756,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0591","unit":"H-0591","street":"70 Queens Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.90995,"lon":-74.538552,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0593","unit":"H-0593","street":"Cayuga Tank","zone":"Fleetwood","own":"M","size":"12\"","lat":40.927594,"lon":-74.526991,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0594","unit":"H-0594","street":"40 Sunrise Rd (Across)","zone":"Fleetwood","own":"M","size":"8\"","lat":40.914088,"lon":-74.535037,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0595","unit":"H-0595","street":"20 Sunrise Rd (Across) @ Pond Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.915507,"lon":-74.534479,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0596","unit":"H-0596","street":"28 Pond Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.914402,"lon":-74.533144,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-0597","unit":"H-0597","street":"Reservoir Rd / Mt Hope Rd","zone":"Fleetwood","own":"M","size":"8\"","lat":40.91155,"lon":-74.527323,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0598","unit":"H-0598","street":"1 Nancy Ct","zone":"Fleetwood","own":"M","size":"8\"","lat":40.913395,"lon":-74.525819,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0599","unit":"H-0599","street":"9 Nancy Ct","zone":"Fleetwood","own":"M","size":"8\"","lat":40.914492,"lon":-74.526006,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-0684","unit":"H-0684","street":"James Pl","zone":"Fleetwood","own":"M","size":"8\"","lat":40.925706,"lon":-74.568071,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0685","unit":"H-0685","street":"Mt Pleasant Ave","zone":"Fleetwood","own":"M","size":"12\"","lat":40.90019,"lon":-74.535134,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-0686","unit":"H-0686","street":"18 Hilltown Rd","zone":"","own":"","size":"","lat":40.92269,"lon":-74.550058,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"H-134","unit":"H-134","street":"60 Green Pond Road (Removed)","zone":"Green Pond","own":"M","size":"12\"","lat":40.915702,"lon":-74.494171,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-185","unit":"H-185","street":"41 Erie Ave (High Erie Tank)","zone":"High Erie","own":"M","size":"8\"","lat":40.930816,"lon":-74.50471,"notes":"","status":"ok","flags":"","geo":"","updated":""},{"id":"H-186","unit":"H-186","street":"Green Pond Water Tank","zone":"Green Pond","own":"M","size":"12\"","lat":40.913586,"lon":-74.497068,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-217","unit":"H-217","street":"Constitution Blvd","zone":"Fleetwood","own":"P","size":"8\"","lat":40.913513,"lon":-74.549017,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-379","unit":"H-379","street":"527 Mt Hope Rd","zone":"Fleetwood","own":"M","size":"10\"","lat":40.922461,"lon":-74.539334,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-398","unit":"H-398","street":"Richard Mine Rd","zone":"Fleetwood","own":"M","size":"12\"","lat":40.919822,"lon":-74.539718,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"H-408","unit":"H-408","street":"Constitution Blvd","zone":"Fleetwood","own":"P","size":"8\"","lat":40.914745,"lon":-74.547729,"notes":"","status":"ok","flags":"outside","geo":"1","updated":""},{"id":"H-522","unit":"H-522","street":"Mall (Outer Roadway)","zone":"Fleetwood","own":"P","size":"","lat":40.908413,"lon":-74.553512,"notes":"","status":"ok","flags":"","geo":"1","updated":""},{"id":"RBWD-308","unit":"RBWD-308","street":"31 Reservoir Rd","zone":"","own":"","size":"","lat":40.914131,"lon":-74.524815,"notes":"Yellow Hydrant","status":"ok","flags":"","geo":"","updated":""},{"id":"ROW-583","unit":"","street":"701 Ford Rd","zone":"","own":"P","size":"Unknown","lat":40.911145,"lon":-74.496467,"notes":"","status":"ok","flags":"no#","geo":"","updated":""}];
+
+var ZONES = ['Fleetwood','Low Erie','High Erie','Green Pond','Supply'];
+var ZCOLOR = {'Fleetwood':'#2073D6','Low Erie':'#E0801A','High Erie':'#8B62D6',
+  'Green Pond':'#17915C','Supply':'#D33F30','':'#6B7C8F'};
+var FLAGTEXT = {
+  'no#':'No hydrant number assigned.',
+  'dup#':'This number is used by more than one hydrant.',
+  'dupXY':'Another hydrant sits at the same coordinates.',
+  'outside':'Geocoder placed this outside the township.'
+};
+
+/* ---------- storage ---------- */
+var DB = (function () {
+  var _db = null;
+  function open() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise(function (res, rej) {
+      var rq = indexedDB.open('rtfd-field', 1);
+      rq.onupgradeneeded = function () {
+        var d = rq.result;
+        if (!d.objectStoreNames.contains('records')) {
+          var s = d.createObjectStore('records',{keyPath:'_key'});
+          s.createIndex('module','_module',{unique:false});
+        }
+        if (!d.objectStoreNames.contains('queue')) d.createObjectStore('queue',{keyPath:'qid',autoIncrement:true});
+        if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta',{keyPath:'k'});
+      };
+      rq.onsuccess = function () { _db = rq.result; res(_db); };
+      rq.onerror = function () { rej(rq.error); };
+    });
+  }
+  function tx(store, mode, fn) {
+    return open().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(store, mode), s = t.objectStore(store), out;
+        try { out = fn(s); } catch (e) { rej(e); return; }
+        t.oncomplete = function () { res(out && out.result !== undefined ? out.result : out); };
+        t.onerror = function () { rej(t.error); };
+        t.onabort = function () { rej(t.error); };
+      });
+    });
+  }
+  function strip(r) { var o={}; for (var k in r) if (k!=='_key' && k!=='_module') o[k]=r[k]; return o; }
+  return {
+    putRecords: function (m, rows) {
+      return tx('records','readwrite',function (s) {
+        rows.forEach(function (r) { var c=Object.assign({},r); c._key=m+':'+r.id; c._module=m; s.put(c); });
+      });
+    },
+    putRecord: function (m, r) {
+      return tx('records','readwrite',function (s) { var c=Object.assign({},r); c._key=m+':'+r.id; c._module=m; s.put(c); });
+    },
+    getRecords: function (m) {
+      return tx('records','readonly',function (s) { return s.index('module').getAll(m); })
+        .then(function (rows) { return (rows||[]).map(strip); });
+    },
+    clearModule: function (m) {
+      return tx('records','readwrite',function (s) {
+        var rq = s.index('module').getAllKeys(m);
+        rq.onsuccess = function () { rq.result.forEach(function (k) { s.delete(k); }); };
+      });
+    },
+    enqueue: function (m,id,p) { return tx('queue','readwrite',function (s) { s.add({module:m,id:id,patch:p,at:Date.now()}); }); },
+    queued: function () { return tx('queue','readonly',function (s) { return s.getAll(); }).then(function (r) { return r||[]; }); },
+    queueCount: function () { return tx('queue','readonly',function (s) { return s.count(); }).then(function (n) { return n||0; }); },
+    dequeue: function (ids) { return tx('queue','readwrite',function (s) { ids.forEach(function (q) { s.delete(q); }); }); },
+    setMeta: function (k,v) { return tx('meta','readwrite',function (s) { s.put({k:k,v:v}); }); },
+    getMeta: function (k,d) { return tx('meta','readonly',function (s) { return s.get(k); })
+      .then(function (r) { return r ? r.v : (d===undefined?null:d); }); }
+  };
+})();
+
+/* ---------- sync ---------- */
+var SYNC = (function () {
+  var endpoint = '';
+  function conf() { return !!endpoint; }
+  function run(module) {
+    if (!conf()) return Promise.reject(new Error('No sync endpoint set. Add it in Setup.'));
+    if (!navigator.onLine) return Promise.reject(new Error('No connection.'));
+    return DB.queued().then(function (all) {
+      var pending = all.filter(function (q) { return q.module === module; });
+      var push = pending.length ? fetch(endpoint,{method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({module:module,edits:pending.map(function (q) {
+          return {id:q.id,patch:q.patch,at:q.at}; })})
+      }).then(function (r) { if (!r.ok) throw new Error('Push failed ('+r.status+')'); return r.json(); })
+        .then(function (o) { if (!o.ok) throw new Error(o.error||'Push rejected');
+          return DB.dequeue(pending.map(function (q) { return q.qid; })); }) : Promise.resolve();
+      return push.then(function () { return DB.getMeta('sync:'+module,''); }).then(function (since) {
+        return fetch(endpoint+'?module='+encodeURIComponent(module)+(since?'&since='+encodeURIComponent(since):''))
+          .then(function (r) { if (!r.ok) throw new Error('Pull failed ('+r.status+')'); return r.json(); });
+      }).then(function (data) {
+        var rows = data.rows || [];
+        return (rows.length ? DB.putRecords(module,rows) : Promise.resolve())
+          .then(function () { return DB.setMeta('sync:'+module, data.now||new Date().toISOString()); })
+          .then(function () { return {pushed:pending.length,pulled:rows.length}; });
+      });
+    });
+  }
+  return {run:run, configured:conf,
+    setEndpoint:function (v) { endpoint=v; }, getEndpoint:function () { return endpoint; },
+    edit:function (m,id,p) {
+      return DB.enqueue(m,id,p).then(function () {
+        if (conf() && navigator.onLine) return run(m).catch(function () { return null; });
+        return null;
+      });
+    }};
+})();
+
+/* ---------- geo ---------- */
+var R_FT=20902231, rad=function (d) { return d*Math.PI/180; };
+function distanceFt(a,b) {
+  var dLat=rad(b.lat-a.lat), dLon=rad(b.lon-a.lon);
+  var s=Math.pow(Math.sin(dLat/2),2)+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.pow(Math.sin(dLon/2),2);
+  return 2*R_FT*Math.asin(Math.min(1,Math.sqrt(s)));
+}
+function bearingDeg(a,b) {
+  var y=Math.sin(rad(b.lon-a.lon))*Math.cos(rad(b.lat));
+  var x=Math.cos(rad(a.lat))*Math.sin(rad(b.lat))-Math.sin(rad(a.lat))*Math.cos(rad(b.lat))*Math.cos(rad(b.lon-a.lon));
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function fmtDist(ft) { return ft<1000 ? Math.round(ft/10)*10+' ft' : (ft/5280).toFixed(ft<5280?2:1)+' mi'; }
+function compass(d) { return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16]; }
+
+function esc(s) { return String(s==null?'':s).replace(/[&<>"']/g,function (c) {
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+var toastEl=document.getElementById('toast'), toastT=null;
+function say(msg) {
+  toastEl.textContent=msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(function () { toastEl.classList.remove('show'); },3200);
+}
+
+/* ============================================================
+   HYDRANTS
+   ============================================================ */
+var HYD = (function () {
+  var rows=[], map=null, layer=null, meMarker=null;
+  var here=null, watchId=null, mode='near', query='', zoneFilter='', flagOnly=false, open=null, el=null;
+
+  function mount(root) {
+    el = root;
+    el.innerHTML =
+      '<div class="pane">' +
+        '<div class="searchrow"><input id="h-q" type="search" inputmode="search" autocomplete="off" ' +
+          'placeholder="Number, street or zone" value="'+esc(query)+'"></div>' +
+        '<div class="chips" id="h-chips"></div>' +
+        '<div class="segmented" role="group" aria-label="View">' +
+          '<button id="h-near" aria-pressed="true">Nearest</button>' +
+          '<button id="h-map" aria-pressed="false">Map</button></div>' +
+        '<div class="count" id="h-count"></div>' +
+        '<div class="list" id="h-list"></div>' +
+        '<div id="map" hidden></div>' +
+        '<div class="sheet" id="h-sheet" role="dialog" aria-label="Hydrant detail"></div>' +
+      '</div>';
+
+    el.querySelector('#h-chips').innerHTML =
+      '<button data-f="all" aria-pressed="'+(!zoneFilter&&!flagOnly)+'">All</button>' +
+      ZONES.map(function (z) {
+        return '<button data-f="zone" data-zone="'+esc(z)+'" aria-pressed="'+(zoneFilter===z)+'">' +
+          '<i style="background:'+ZCOLOR[z]+'"></i>'+esc(z)+'</button>';
+      }).join('') +
+      '<button data-f="flag" aria-pressed="'+flagOnly+'">Needs review</button>';
+
+    el.querySelector('#h-chips').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      var f = b.getAttribute('data-f');
+      if (f === 'all') { zoneFilter=''; flagOnly=false; }
+      else if (f === 'zone') { var z=b.getAttribute('data-zone');
+        zoneFilter = (zoneFilter===z ? '' : z); flagOnly=false; }
+      else { flagOnly = !flagOnly; zoneFilter=''; }
+      paintChips();
+      if (mode==='near') renderList(); else drawPins();
+    });
+
+    el.querySelector('#h-q').addEventListener('input', function (e) {
+      query = e.target.value.trim().toLowerCase();
+      if (mode==='near') renderList(); else drawPins();
+    });
+    el.querySelector('#h-near').addEventListener('click', function () { setMode('near'); });
+    el.querySelector('#h-map').addEventListener('click', function () { setMode('map'); });
+
+    return DB.getMeta('seed','').then(function (v) {
+      if (v === SEED_VERSION) return DB.getRecords('hydrants');
+      return DB.getRecords('hydrants').then(function (existing) {
+        if (existing.length && v) return existing;   // user loaded their own data
+        return DB.putRecords('hydrants', SEED)
+          .then(function () { return DB.setMeta('seed', SEED_VERSION); })
+          .then(function () { return SEED.slice(); });
+      });
+    }).then(function (r) {
+      rows = r;
+      startWatch();
+      setMode(mode);
+    });
+  }
+
+  function unmount() {
+    if (watchId!=null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId=null;
+    if (map) { map.remove(); map=null; layer=null; meMarker=null; }
+    el=null;
+  }
+
+  function paintChips() {
+    Array.prototype.forEach.call(el.querySelectorAll('#h-chips button'), function (b) {
+      var f=b.getAttribute('data-f');
+      b.setAttribute('aria-pressed',
+        f==='all' ? (!zoneFilter && !flagOnly) :
+        f==='zone' ? (zoneFilter===b.getAttribute('data-zone')) : flagOnly);
+    });
+  }
+
+  function startWatch() {
+    if (!navigator.geolocation) return;
+    watchId = navigator.geolocation.watchPosition(function (p) {
+      here={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};
+      drawMe(); if (mode==='near') renderList();
+    }, function () { say('Location unavailable — sorted by number instead.'); },
+      {enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+  }
+
+  function setMode(m) {
+    mode=m;
+    el.querySelector('#h-near').setAttribute('aria-pressed', m==='near');
+    el.querySelector('#h-map').setAttribute('aria-pressed', m==='map');
+    el.querySelector('#h-list').hidden = m!=='near';
+    el.querySelector('#map').hidden = m!=='map';
+    if (m==='near') renderList(); else showMap();
+  }
+
+  function matches(h) {
+    if (zoneFilter && h.zone !== zoneFilter) return false;
+    if (flagOnly && !h.flags) return false;
+    if (!query) return true;
+    return (h.unit||'').toLowerCase().indexOf(query)>-1 ||
+           (h.street||'').toLowerCase().indexOf(query)>-1 ||
+           (h.zone||'').toLowerCase().indexOf(query)>-1 ||
+           (h.notes||'').toLowerCase().indexOf(query)>-1;
+  }
+
+  function renderList() {
+    var list=el.querySelector('#h-list');
+    var out=rows.filter(matches), total=out.length;
+    if (here) {
+      out.forEach(function (h) { h._d=distanceFt(here,h); h._b=bearingDeg(here,h); });
+      out.sort(function (a,b) { return a._d-b._d; });
+    } else {
+      out.sort(function (a,b) { return String(a.unit).localeCompare(String(b.unit)); });
+    }
+    out=out.slice(0,80);
+    el.querySelector('#h-count').textContent =
+      total + (total===1?' hydrant':' hydrants') +
+      (total>out.length ? (here ? ' — nearest '+out.length : ' — first '+out.length+' by number') : '') +
+      (here ? '' : ' — waiting on GPS');
+    if (!out.length) {
+      list.innerHTML='<div class="empty"><strong>Nothing matches</strong>'+
+        'Try a hydrant number, street or zone, or clear the filters.</div>';
+      return;
+    }
+    list.innerHTML=out.map(card).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.card'), function (b) {
+      b.addEventListener('click', function () { openSheet(b.getAttribute('data-id')); });
+    });
+  }
+
+  function card(h) {
+    var oos=h.status==='oos';
+    var range = here ? '<div class="dist">'+fmtDist(h._d)+'</div>'+
+      '<svg class="bearing" viewBox="0 0 24 24" style="transform:rotate('+Math.round(h._b)+'deg)">'+
+      '<path d="M12 3v18M12 3l-5 6M12 3l5 6"/></svg>'+
+      '<div class="meta">'+compass(h._b)+'</div>' : '';
+    return '<button class="card" data-id="'+esc(h.id)+'">'+
+      '<i class="flag" data-zone="'+esc(h.zone)+'"></i>'+
+      '<span class="body">'+
+        '<span class="unit'+(h.unit?'':' unset')+'">'+esc(h.unit||'no number')+
+          (oos?' <b class="oosb">OOS</b>':'')+
+          (h.flags?' <b class="warn">!</b>':'')+'</span>'+
+        '<span class="street">'+esc(h.street||'')+'</span>'+
+        '<span class="meta">'+esc(h.zone||'no zone')+
+          (h.size?' &middot; '+esc(h.size):'')+
+          (h.own?' &middot; '+(h.own==='M'?'Municipal':'Private'):'')+'</span>'+
+      '</span><span class="range">'+range+'</span></button>';
+  }
+
+  function showMap() {
+    if (typeof L === 'undefined') {
+      el.querySelector('#map').innerHTML='<div class="empty"><strong>Map needs a connection</strong>'+
+        'The nearest list still works.</div>';
+      return;
+    }
+    if (!map) {
+      map=L.map('map',{zoomControl:false,preferCanvas:true})
+        .setView(here?[here.lat,here.lon]:center(), here?17:13);
+      L.control.zoom({position:'topright'}).addTo(map);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+      layer=L.layerGroup().addTo(map);
+    }
+    setTimeout(function () { map.invalidateSize(); },60);
+    drawPins(); drawMe();
+  }
+
+  function center() {
+    if (!rows.length) return [40.92,-74.53];
+    var la=0,lo=0;
+    rows.forEach(function (h) { la+=h.lat; lo+=h.lon; });
+    return [la/rows.length,lo/rows.length];
+  }
+
+  function drawPins() {
+    if (!layer) return;
+    layer.clearLayers();
+    rows.filter(matches).forEach(function (h) {
+      var oos=h.status==='oos';
+      var m=L.circleMarker([h.lat,h.lon],{radius:6,weight:2,color:'rgba(255,255,255,.85)',
+        fillColor:ZCOLOR[h.zone]||ZCOLOR[''], fillOpacity:oos?.3:.95, className:'pin'});
+      m.on('click',function () { openSheet(h.id); });
+      m.addTo(layer);
+    });
+  }
+
+  function drawMe() {
+    if (!map || !here) return;
+    if (!meMarker) meMarker=L.circleMarker([here.lat,here.lon],
+      {radius:6,weight:3,color:'#E8EEF4',fillColor:'#E8EEF4',fillOpacity:.3}).addTo(map);
+    else meMarker.setLatLng([here.lat,here.lon]);
+  }
+
+  function openSheet(hid) {
+    var h=null;
+    rows.forEach(function (r) { if (String(r.id)===String(hid)) h=r; });
+    if (!h) return;
+    open=h;
+    var sheet=el.querySelector('#h-sheet');
+    var alerts=(h.flags?h.flags.split(','):[]).map(function (f) {
+      return '<div class="alert">'+esc(FLAGTEXT[f]||f)+'</div>'; }).join('');
+    sheet.innerHTML=
+      '<div class="sheet-head"><div><h2>'+esc(h.unit||'No number')+'</h2>'+
+        '<div class="street">'+esc(h.street||'')+'</div></div>'+
+        '<button class="closeb" id="h-x" aria-label="Close">&times;</button></div>'+
+      alerts+
+      '<label class="fld"><span>Hydrant number</span>'+
+        '<input id="f-unit" class="big" value="'+esc(h.unit||'')+'"></label>'+
+      '<div class="fldlab">Zone</div><div class="zonerow" id="f-zone">'+
+        ZONES.map(function (z) {
+          return '<button data-zone="'+esc(z)+'" aria-pressed="'+(h.zone===z)+'">'+esc(z)+'</button>';
+        }).join('')+'</div>'+
+      '<div class="two">'+
+        '<label class="fld"><span>Main size</span>'+
+          '<input id="f-size" value="'+esc(h.size||'')+'" placeholder="8&quot;"></label>'+
+        '<label class="fld"><span>Owner</span><select id="f-own">'+
+          '<option value=""'+(h.own?'':' selected')+'>—</option>'+
+          '<option value="M"'+(h.own==='M'?' selected':'')+'>Municipal</option>'+
+          '<option value="P"'+(h.own==='P'?' selected':'')+'>Private</option>'+
+        '</select></label></div>'+
+      '<label class="fld"><span>Notes</span><textarea id="f-notes" '+
+        'placeholder="Access, steamer direction, seasonal issues">'+esc(h.notes||'')+'</textarea></label>'+
+      '<label class="oos"><input type="checkbox" id="f-oos"'+(h.status==='oos'?' checked':'')+
+        '><span>Out of service</span></label>'+
+      '<div class="actions"><button class="btn ghost" id="f-nav">Directions</button>'+
+        '<button class="btn primary" id="f-save">Save</button></div>'+
+      '<div class="kv"><b>record</b><span>'+esc(h.id)+'</span>'+
+        '<b>coords</b><span>'+Number(h.lat).toFixed(5)+', '+Number(h.lon).toFixed(5)+'</span>'+
+        '<b>position</b><span>'+(h.geo?'approximate (geocoded)':'from field record')+'</span>'+
+        '<b>updated</b><span>'+esc(h.updated||'never')+'</span></div>';
+    sheet.classList.add('open');
+
+    sheet.querySelector('#h-x').onclick=closeSheet;
+    Array.prototype.forEach.call(sheet.querySelectorAll('#f-zone button'), function (b) {
+      b.onclick=function () {
+        var was=b.getAttribute('aria-pressed')==='true';
+        Array.prototype.forEach.call(sheet.querySelectorAll('#f-zone button'), function (x) {
+          x.setAttribute('aria-pressed', !was && x===b);
+        });
+      };
+    });
+    sheet.querySelector('#f-nav').onclick=function () {
+      window.open('https://www.google.com/maps/dir/?api=1&destination='+h.lat+','+h.lon,'_blank');
+    };
+    sheet.querySelector('#f-save').onclick=save;
+  }
+
+  function closeSheet() {
+    var sheet=el&&el.querySelector('#h-sheet');
+    if (sheet) sheet.classList.remove('open');
+    open=null;
+  }
+
+  function save() {
+    if (!open) return;
+    var sheet=el.querySelector('#h-sheet');
+    sheet.querySelector('#f-save').disabled=true;
+    var z=sheet.querySelector('#f-zone button[aria-pressed="true"]');
+    var patch={
+      unit:sheet.querySelector('#f-unit').value.trim(),
+      zone:z?z.getAttribute('data-zone'):'',
+      size:sheet.querySelector('#f-size').value.trim(),
+      own:sheet.querySelector('#f-own').value,
+      notes:sheet.querySelector('#f-notes').value.trim(),
+      status:sheet.querySelector('#f-oos').checked?'oos':'ok',
+      updated:new Date().toISOString().slice(0,16).replace('T',' ')
+    };
+    Object.assign(open,patch);
+    var rec=open;
+    DB.putRecord('hydrants',rec)
+      .then(function () { return SYNC.edit('hydrants',rec.id,patch); })
+      .then(function (res) {
+        closeSheet();
+        if (mode==='near') renderList(); else drawPins();
+        say(res?'Saved and synced.':'Saved on this device.');
+        paintQueue();
+      });
+  }
+
+  function reload() {
+    return DB.getRecords('hydrants').then(function (r) {
+      rows=r;
+      if (el) { if (mode==='near') renderList(); else drawPins(); }
+    });
+  }
+  function all() { return rows; }
+
+  return {id:'hydrants', title:'Hydrants',
+    icon:'<svg viewBox="0 0 24 24"><path d="M9 21h6M8 21V10a4 4 0 0 1 8 0v11M6 12h2M16 12h2M9 6h6M12 6V4"/></svg>',
+    mount:mount, unmount:unmount, reload:reload, all:all};
+})();
+
+/* ============================================================
+   SETUP
+   ============================================================ */
+var SET = (function () {
+  var el=null;
+  function mount(root) {
+    el=root;
+    return Promise.all([DB.getMeta('endpoint',''),DB.getMeta('sync:hydrants',''),
+      DB.getRecords('hydrants'),DB.queueCount()]).then(function (r) {
+      var url=r[0], last=r[1], recs=r[2], pending=r[3];
+      if (url) SYNC.setEndpoint(url);
+
+      var byZone={}, flagged={}, oos=0, edited=0;
+      recs.forEach(function (h) {
+        byZone[h.zone||'']=(byZone[h.zone||'']||0)+1;
+        if (h.status==='oos') oos++;
+        if (h.updated) edited++;
+        (h.flags?h.flags.split(','):[]).forEach(function (f) { flagged[f]=(flagged[f]||0)+1; });
+      });
+
+      el.innerHTML='<div class="pane settings">'+
+        '<h2>Data</h2>'+
+        '<div class="row"><div class="lab"><b>Hydrants on this device</b>'+
+          '<small>From Hyd_Test.xlsx, Hydrants sheet</small></div>'+
+          '<div class="val">'+recs.length+'</div></div>'+
+        '<div class="row"><div class="lab"><b>Edited here</b>'+
+          '<small>Changed since the file was loaded</small></div><div class="val">'+edited+'</div></div>'+
+        '<div class="row"><div class="lab"><b>Out of service</b></div><div class="val">'+oos+'</div></div>'+
+
+        '<h2>Zones</h2>'+
+        ZONES.concat(['']).filter(function (z) { return byZone[z]; }).map(function (z) {
+          return '<div class="row"><i class="sw" style="background:'+ZCOLOR[z]+'"></i>'+
+            '<div class="lab"><b>'+(z||'No zone assigned')+'</b></div>'+
+            '<div class="val">'+byZone[z]+'</div></div>';
+        }).join('')+
+
+        '<h2>Needs review</h2>'+
+        '<p>Carried over from the workbook audit. Tap <b>Needs review</b> on the Hydrants tab '+
+          'to work through them.</p>'+
+        [['no#','No hydrant number'],['dup#','Duplicate numbers'],
+         ['dupXY','Same coordinates as another'],['outside','Geocoded outside the township']]
+        .map(function (f) {
+          return '<div class="row"><div class="lab"><b>'+f[1]+'</b></div>'+
+            '<div class="val">'+(flagged[f[0]]||0)+'</div></div>';
+        }).join('')+
+
+        '<h2>Sync</h2>'+
+        '<label class="fld"><span>Apps Script web app URL</span>'+
+          '<input id="s-url" type="url" inputmode="url" '+
+          'placeholder="https://script.google.com/macros/s/.../exec" value="'+esc(url)+'"></label>'+
+        '<div class="actions"><button class="btn ghost" id="s-save">Save URL</button>'+
+          '<button class="btn primary" id="s-sync">Sync now</button></div>'+
+        '<div class="row"><div class="lab"><b>Last sync</b><small>'+
+          (last?esc(String(last).replace('T',' ').slice(0,16)):'never')+'</small></div>'+
+          '<div class="val">'+pending+' queued</div></div>'+
+
+        '<h2>Export</h2>'+
+        '<p>Copies every record as JSON, including your edits — paste it back into the '+
+          'workbook or keep it as a backup.</p>'+
+        '<div class="actions"><button class="btn ghost" id="s-reset">Reset to file</button>'+
+          '<button class="btn primary" id="s-export">Copy all records</button></div>'+
+        '</div>';
+
+      el.querySelector('#s-save').onclick=function () {
+        var v=el.querySelector('#s-url').value.trim();
+        SYNC.setEndpoint(v);
+        DB.setMeta('endpoint',v).then(function () { say(v?'Endpoint saved.':'Endpoint cleared.'); });
+      };
+      el.querySelector('#s-sync').onclick=function (e) {
+        e.target.disabled=true;
+        SYNC.run('hydrants').then(function (res) {
+          say('Synced. Sent '+res.pushed+', received '+res.pulled+'.');
+          return HYD.reload();
+        }).catch(function (err) { say(err.message); })
+          .then(function () { e.target.disabled=false; paintQueue(); });
+      };
+      el.querySelector('#s-export').onclick=function () {
+        DB.getRecords('hydrants').then(function (rs) {
+          var text=JSON.stringify({version:SEED_VERSION,rows:rs},null,1);
+          if (navigator.clipboard) navigator.clipboard.writeText(text)
+            .then(function () { say('Copied '+rs.length+' records.'); })
+            .catch(function () { say('Clipboard blocked — use a desktop browser.'); });
+          else say('Clipboard not available in this browser.');
+        });
+      };
+      el.querySelector('#s-reset').onclick=function () {
+        if (!confirm('Reload all '+SEED.length+' hydrants from the file? Edits made on this device are lost.')) return;
+        DB.clearModule('hydrants')
+          .then(function () { return DB.putRecords('hydrants',SEED); })
+          .then(function () { return DB.setMeta('seed',SEED_VERSION); })
+          .then(function () { return HYD.reload(); })
+          .then(function () { say('Reloaded from file.'); return mount(el); });
+      };
+    });
+  }
+  function unmount() { el=null; }
+  return {id:'settings', title:'Setup',
+    icon:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg>',
+    mount:mount, unmount:unmount};
+})();
+
+/* ---------- shell ---------- */
+var MODULES=[HYD,SET], current=null;
+var view=document.getElementById('view'), tabs=document.getElementById('tabs');
+var netEl=document.getElementById('net'), badge=document.getElementById('queue');
+
+tabs.innerHTML=MODULES.map(function (m) {
+  return '<button data-id="'+m.id+'" aria-current="false">'+m.icon+'<span>'+m.title+'</span></button>';
+}).join('');
+tabs.addEventListener('click',function (e) {
+  var b=e.target.closest('button'); if (b) go(b.getAttribute('data-id'));
+});
+
+function go(id) {
+  var m=null;
+  MODULES.forEach(function (x) { if (x.id===id) m=x; });
+  if (!m || (current && current.id===id)) return Promise.resolve();
+  if (current && current.unmount) current.unmount();
+  view.innerHTML='';
+  current=m;
+  Array.prototype.forEach.call(tabs.querySelectorAll('button'),function (b) {
+    b.setAttribute('aria-current', b.getAttribute('data-id')===id?'page':'false');
+  });
+  return Promise.resolve(m.mount(view)).catch(function (err) {
+    view.innerHTML='<div class="pane"><div class="empty"><strong>Could not open '+esc(m.title)+
+      '</strong>'+esc(err&&err.message?err.message:String(err))+'</div></div>';
+  });
+}
+
+function paintNet() {
+  netEl.setAttribute('data-net', navigator.onLine?'on':'off');
+  netEl.title=navigator.onLine?'Online':'Offline — edits are saved on the device';
+}
+function paintQueue() {
+  return DB.queueCount().then(function (n) {
+    badge.hidden=n===0; badge.textContent=n+' to send';
+  });
+}
+window.addEventListener('online',function () { paintNet(); drain(); });
+window.addEventListener('offline',paintNet);
+function drain() {
+  if (!SYNC.configured()) return;
+  SYNC.run('hydrants').then(function (r) {
+    if (r.pushed) say('Sent '+r.pushed+' saved edit'+(r.pushed===1?'':'s')+'.');
+    return HYD.reload();
+  }).catch(function () {}).then(paintQueue);
+}
+
+paintNet();
+DB.getMeta('endpoint','').then(function (url) {
+  if (url) SYNC.setEndpoint(url);
+  return paintQueue();
+}).then(function () { return go(MODULES[0].id); })
+  .then(function () { if (navigator.onLine) drain(); })
+  .catch(function (err) {
+    view.innerHTML='<div class="pane"><div class="empty"><strong>Startup failed</strong>'+
+      esc(err&&err.message?err.message:String(err))+'</div></div>';
+  });
+})();
+</script>
+</body>
+</html>
