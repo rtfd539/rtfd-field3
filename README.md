@@ -104,6 +104,22 @@ keeps its edited fields, and an edited record the new file dropped is kept too.
 Setup shows which data file the device is on. If it says anything other than
 current, **Reset to file** forces a reload.
 
+## If a phone won't update
+
+Setup shows **App build** and **Data file**. If either doesn't match what you
+uploaded, that phone is running an old copy. In order:
+
+1. Hard refresh — Ctrl+Shift+R, or open the URL in a private window
+2. If it was added to the home screen, **delete the icon**, open the URL in the
+   browser, confirm the build is right, then re-add it
+3. Clear the site data — iPhone: Settings → Safari → Advanced → Website Data →
+   find the site → delete. Android Chrome: ⋮ → Settings → Site settings → All
+   sites → the site → Clear & reset
+
+The app removes any leftover service worker from the earlier multi-file build on
+startup. That only works once the new file actually loads — if an old worker is
+still intercepting the page, step 3 is what clears it.
+
 ## Getting edits back out
 
 **Setup → Copy all records** puts all 878 water supply records plus the 20
